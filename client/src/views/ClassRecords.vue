@@ -1,7 +1,6 @@
 <template>
   <div class="class-records">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h2>Class Records</h2>
       <div class="d-flex gap-2">
         <button class="btn btn-primary" @click="showAddStudentRecordModal = true">
           <i class="fas fa-user-plus"></i> Add Student Record
@@ -47,19 +46,18 @@
                   <label class="form-label">Year</label>
                   <select class="form-select form-select-sm" v-model="selectedYear" @change="applyFilters">
                     <option value="">Select Year</option>
-                    <option value="1st">1st Year</option>
-                    <option value="2nd">2nd Year</option>
-                    <option value="3rd">3rd Year</option>
-                    <option value="4th">4th Year</option>
+                    <option v-for="year in availableYears" :key="year" :value="year">
+                      {{ year }}
+                    </option>
                   </select>
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Section</label>
                   <select class="form-select form-select-sm" v-model="selectedSection" @change="applyFilters">
                     <option value="">Select Section</option>
-                    <option value="South 1">South 1</option>
-                    <option value="South 2">South 2</option>
-                    <option value="South 3">South 3</option>
+                    <option v-for="section in availableSections" :key="section" :value="section">
+                      {{ section }}
+                    </option>
                   </select>
                 </div>
                 <div class="mb-3">
@@ -103,9 +101,11 @@
                 <th>Last Name</th>
                 <th>First Name</th>
                 <th v-for="assessment in assessments" :key="assessment.id">
-                  {{ assessment.type }} {{ assessment.number }}
-                  <br>
-                  <small>({{ assessment.maxScore }} pts)</small>
+                  <div class="assessment-header" @click="editAssessment(assessment)">
+                      {{ assessment.type }} {{ assessment.number }}
+                      <br>
+                      <small>({{ assessment.maxScore }} pts)</small>
+                  </div>
                 </th>
               </tr>
             </thead>
@@ -211,7 +211,8 @@
     </div>
 
     <!-- Student Details Modal -->
-    <div v-if="selectedStudent" class="modal fade show" style="display: block">
+    <div v-if="selectedStudent" class="modal-wrapper">
+      <div class="modal">
       <div class="modal-dialog modal-xl">
         <div class="modal-content">
           <div class="modal-header bg-primary text-white">
@@ -255,6 +256,15 @@
               <div class="performance-header">
                 <i class="fas fa-chart-line me-2"></i>
                 Performance Overview
+                  <div class="ms-auto d-flex gap-2">
+                    <div class="date-filter">
+                      <button class="btn btn-sm btn-outline-light" @click="showChartDateFilter = true">
+                        <i class="fas fa-calendar me-1"></i>
+                        {{ chartDateRange.start ? formatDate(chartDateRange.start) : 'Start' }} - 
+                        {{ chartDateRange.end ? formatDate(chartDateRange.end) : 'End' }}
+                      </button>
+                    </div>
+                  </div>
               </div>
               <div class="performance-content">
                 <div class="row">
@@ -285,6 +295,23 @@
               <div class="history-header">
                 <i class="fas fa-history me-2"></i>
                 Score History
+                  <div class="ms-auto d-flex gap-2">
+                    <div class="assessment-filter">
+                      <select class="form-select form-select-sm" v-model="selectedAssessmentType">
+                        <option value="">All Types</option>
+                        <option value="Quiz">Quizzes</option>
+                        <option value="Activity">Activities</option>
+                        <option value="Performance Task">Performance Tasks</option>
+                      </select>
+                    </div>
+                    <div class="date-filter">
+                      <button class="btn btn-sm btn-outline-light" @click="showHistoryDateFilter = true">
+                        <i class="fas fa-calendar me-1"></i>
+                        {{ historyDateRange.start ? formatDate(historyDateRange.start) : 'Start' }} - 
+                        {{ historyDateRange.end ? formatDate(historyDateRange.end) : 'End' }}
+                      </button>
+                    </div>
+                  </div>
               </div>
               <div class="history-content">
                 <div class="table-responsive">
@@ -300,7 +327,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="assessment in selectedStudent.assessments" :key="assessment.id">
+                        <tr v-for="assessment in filteredAssessments" :key="assessment.id">
                         <td>{{ formatDate(assessment.date) }}</td>
                         <td>
                           <span :class="'badge ' + getAssessmentBadgeClass(assessment.type)">
@@ -324,7 +351,66 @@
           </div>
         </div>
       </div>
-      <div class="modal-backdrop fade show"></div>
+      </div>
+      <div class="modal-backdrop" @click="selectedStudent = null"></div>
+    </div>
+
+    <!-- Chart Date Filter Modal -->
+    <div v-if="showChartDateFilter" class="modal-wrapper">
+      <div class="modal">
+        <div class="modal-dialog modal-sm">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Filter Chart Date Range</h5>
+              <button type="button" class="btn-close btn-close-white" @click="showChartDateFilter = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Start Date</label>
+                <input type="date" class="form-control" v-model="chartDateRange.start">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">End Date</label>
+                <input type="date" class="form-control" v-model="chartDateRange.end">
+              </div>
+              <div class="text-end">
+                <button class="btn btn-secondary me-2" @click="clearChartDateFilter">Clear</button>
+                <button class="btn btn-primary" @click="applyChartDateFilter">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="showChartDateFilter = false"></div>
+    </div>
+
+    <!-- History Date Filter Modal -->
+    <div v-if="showHistoryDateFilter" class="modal-wrapper">
+      <div class="modal">
+        <div class="modal-dialog modal-sm">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Filter History Date Range</h5>
+              <button type="button" class="btn-close btn-close-white" @click="showHistoryDateFilter = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Start Date</label>
+                <input type="date" class="form-control" v-model="historyDateRange.start">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">End Date</label>
+                <input type="date" class="form-control" v-model="historyDateRange.end">
+              </div>
+              <div class="text-end">
+                <button class="btn btn-secondary me-2" @click="clearHistoryDateFilter">Clear</button>
+                <button class="btn btn-primary" @click="applyHistoryDateFilter">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="showHistoryDateFilter = false"></div>
     </div>
 
     <!-- Add Student Record Modal -->
@@ -342,10 +428,9 @@
                 <label class="form-label">Year</label>
                 <select class="form-select" v-model="newStudentRecord.year" required>
                   <option value="">Select Year</option>
-                  <option value="1st">1st Year</option>
-                  <option value="2nd">2nd Year</option>
-                  <option value="3rd">3rd Year</option>
-                  <option value="4th">4th Year</option>
+                  <option v-for="year in availableYears" :key="year" :value="year">
+                    {{ year }}
+                  </option>
                 </select>
               </div>
 
@@ -354,9 +439,9 @@
                 <label class="form-label">Section</label>
                 <select class="form-select" v-model="newStudentRecord.section" required>
                   <option value="">Select Section</option>
-                  <option value="South 1">South 1</option>
-                  <option value="South 2">South 2</option>
-                  <option value="South 3">South 3</option>
+                  <option v-for="section in availableSections" :key="section" :value="section">
+                    {{ section }}
+                  </option>
                 </select>
               </div>
 
@@ -379,6 +464,71 @@
                 <button type="submit" class="btn btn-primary" :disabled="!canAddStudentRecord">
                   Add Record
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="modal-backdrop fade show"></div>
+    </div>
+
+    <!-- Edit Assessment Modal -->
+    <div v-if="showEditAssessmentModal" class="modal fade show" style="display: block">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Edit Assessment</h5>
+            <button type="button" class="btn-close" @click="showEditAssessmentModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <form @submit.prevent="handleEditAssessment">
+              <!-- Assessment Type -->
+              <div class="mb-3">
+                <label class="form-label">Type</label>
+                <select class="form-select" v-model="editingAssessment.type" required>
+                  <option value="">Select Type</option>
+                  <option value="Quiz">Quiz</option>
+                  <option value="Activity">Activity</option>
+                  <option value="Performance Task">Performance Task</option>
+                </select>
+              </div>
+
+              <!-- Assessment Number -->
+              <div class="mb-3">
+                <label class="form-label">Number</label>
+                <input 
+                  type="number" 
+                  class="form-control" 
+                  v-model="editingAssessment.number"
+                  min="1"
+                  required
+                >
+              </div>
+
+              <!-- Max Score -->
+              <div class="mb-3">
+                <label class="form-label">Maximum Score</label>
+                <input 
+                  type="number" 
+                  class="form-control" 
+                  v-model="editingAssessment.maxScore"
+                  min="1"
+                  required
+                >
+              </div>
+
+              <div class="d-flex justify-content-between">
+                <button type="button" class="btn btn-danger" @click="handleDeleteAssessment">
+                  <i class="fas fa-trash me-1"></i> Delete Assessment
+                </button>
+                <div>
+                <button type="button" class="btn btn-secondary me-2" @click="showEditAssessmentModal = false">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                  Save Changes
+                </button>
+                </div>
               </div>
             </form>
           </div>
@@ -430,12 +580,27 @@ export default {
       subject: ''
     })
 
+    // Add new refs for filters
+    const selectedAssessmentType = ref('')
+    const showChartDateFilter = ref(false)
+    const showHistoryDateFilter = ref(false)
+    const chartDateRange = ref({
+      start: '',
+      end: ''
+    })
+    const historyDateRange = ref({
+      start: '',
+      end: ''
+    })
+
     const newAssessment = ref({
       type: '',
       number: '',
       maxScore: ''
     })
 
+    const availableYears = ref([])
+    const availableSections = ref([])
     const teacherSubjects = ref([])
 
     const teachingYear = computed(() => {
@@ -525,7 +690,30 @@ export default {
 
     // Filter functions
     const applyFilters = async () => {
-      await fetchClassData()
+      console.log('Applying filters:', {
+        year: selectedYear.value,
+        section: selectedSection.value,
+        subject: selectedSubject.value
+      })
+      
+      // Reset subject when year or section changes
+      if (!selectedYear.value || !selectedSection.value) {
+        selectedSubject.value = ''
+        availableSubjects.value = []
+      }
+      
+      // Fetch available subjects when year and section are selected
+      if (selectedYear.value && selectedSection.value) {
+        await updateTeacherSubjects()
+      }
+      
+      // Fetch students and assessments if all filters are selected
+      if (selectedYear.value && selectedSection.value && selectedSubject.value) {
+        await Promise.all([
+          fetchClassData(),
+          fetchAssessments()
+        ])
+      }
     }
 
     // Computed property to check if record can be added
@@ -604,6 +792,18 @@ export default {
         // Validate assessment data
         if (!newAssessment.value.type || !newAssessment.value.number || !newAssessment.value.maxScore) {
           alert('Please fill in all assessment fields.')
+          return
+        }
+
+        // Check for assessment limit per day
+        const today = new Date().toISOString().split('T')[0]
+        const todaysAssessments = assessments.value.filter(assessment => {
+          const assessmentDate = new Date(assessment.date).toISOString().split('T')[0]
+          return assessmentDate === today
+        })
+
+        if (todaysAssessments.length >= 5) {
+          alert('Maximum limit of 5 assessments per day has been reached.')
           return
         }
 
@@ -845,14 +1045,27 @@ export default {
           assessments: studentAssessments
         };
 
-        // Group assessments by type for charts
+        // Set default date range to today
+        const today = new Date().toISOString().split('T')[0];
+        chartDateRange.value = {
+          start: today,
+          end: today
+        };
+
+        // Filter assessments for today by default
+        const todaysAssessments = studentAssessments.filter(assessment => {
+          const assessmentDate = new Date(assessment.date).toISOString().split('T')[0];
+          return assessmentDate === today;
+        });
+
+        // Group today's assessments by type for charts
         const assessmentsByType = {
           Quiz: [],
           Activity: [],
           'Performance Task': []
         };
 
-        studentAssessments.forEach(assessment => {
+        todaysAssessments.forEach(assessment => {
           const score = assessment.scores[student.studentNumber];
           if (assessment.type in assessmentsByType) {
             assessmentsByType[assessment.type].push({
@@ -878,7 +1091,7 @@ export default {
         // Wait for the next tick to ensure the canvases are mounted
         await nextTick();
 
-        // Create new charts
+        // Create new charts with today's data
         Object.entries(assessmentsByType).forEach(([type, data]) => {
           if (data.length > 0) {
             const chartRef = type === 'Quiz' ? quizChart :
@@ -914,16 +1127,28 @@ export default {
         const token = store.state.auth.token
         const teacherId = store.state.auth.user?._id || user.value?._id
 
-        if (!teacherId) return
+        if (!teacherId || !selectedYear.value || !selectedSection.value) {
+          teacherSubjects.value = []
+          return
+        }
 
         const response = await axios.get('http://localhost:8000/api/teacher-class-records', {
-          params: { teacherId },
+          params: { 
+            teacherId,
+            year: selectedYear.value,
+            section: selectedSection.value
+          },
           headers: { 'Authorization': `Bearer ${token}` }
         })
 
         // Extract unique subjects from teacher's records
         const subjects = new Set(response.data.map(record => record.subject))
-        teacherSubjects.value = Array.from(subjects)
+        teacherSubjects.value = Array.from(subjects).sort()
+
+        // If no subject is selected but we have subjects available, select the first one
+        if (!selectedSubject.value && teacherSubjects.value.length > 0) {
+          selectedSubject.value = teacherSubjects.value[0]
+        }
       } catch (error) {
         console.error('Failed to fetch teacher subjects:', error)
       }
@@ -1011,35 +1236,56 @@ export default {
       }
     }
 
-    // Watch for changes in filters
-    watch([selectedYear, selectedSection, selectedSubject], () => {
-      fetchClassData()
+    // Watch for changes in year selection
+    watch(selectedYear, async (newYear) => {
+      selectedSection.value = ''
+      selectedSubject.value = ''
+      localStorage.setItem('selectedYear', newYear)
+      if (newYear) {
+        await fetchAvailableSections()
+      } else {
+        availableSections.value = []
+        teacherSubjects.value = []
+      }
     })
 
-    // Watch for changes in selections and update localStorage
-    watch(selectedYear, (newValue) => {
-      localStorage.setItem('selectedYear', newValue)
+    // Watch for changes in section selection
+    watch(selectedSection, async (newSection) => {
+      selectedSubject.value = ''
+      localStorage.setItem('selectedSection', newSection)
+      if (newSection) {
+        await updateTeacherSubjects()
+      } else {
+        teacherSubjects.value = []
+      }
     })
 
-    watch(selectedSection, (newValue) => {
-      localStorage.setItem('selectedSection', newValue)
+    // Watch for changes in subject selection
+    watch(selectedSubject, async (newSubject) => {
+      localStorage.setItem('selectedSubject', newSubject)
+      if (newSubject) {
+        await Promise.all([
+          fetchClassData(),
+          fetchAssessments()
+        ])
+      }
     })
 
-    watch(selectedSubject, (newValue) => {
-      localStorage.setItem('selectedSubject', newValue)
-    })
-
-    // Add a function to clear filters
+    // Add clearFilters function
     const clearFilters = () => {
       selectedYear.value = ''
       selectedSection.value = ''
       selectedSubject.value = ''
+      availableSections.value = []
+      teacherSubjects.value = []
       localStorage.removeItem('selectedYear')
       localStorage.removeItem('selectedSection')
       localStorage.removeItem('selectedSubject')
+      // Refetch available years after clearing
+      fetchAvailableYears()
     }
 
-    // Add onMounted hook to fetch teacher data and subjects
+    // Add onMounted hook to fetch initial data
     onMounted(async () => {
       if (store.getters.isLoggedIn) {
         try {
@@ -1053,12 +1299,26 @@ export default {
           if (response.data && response.data.role === 'teacher') {
             user.value = response.data
             console.log('Teacher data loaded:', user.value)
-            await updateTeacherSubjects() // Fetch teacher's subjects
             
-            // Fetch both class data and assessments if we have stored filters
-            if (selectedYear.value && selectedSection.value && selectedSubject.value) {
-              await fetchClassData()
-              await fetchAssessments()
+            // Fetch available years first
+            await fetchAvailableYears()
+            
+            // If year is selected, fetch sections
+            if (selectedYear.value) {
+              await fetchAvailableSections()
+              
+              // If section is selected, fetch subjects
+              if (selectedSection.value) {
+                await updateTeacherSubjects()
+                
+                // If subject is selected, fetch class data and assessments
+                if (selectedSubject.value) {
+                  await Promise.all([
+                    fetchClassData(),
+                    fetchAssessments()
+                  ])
+                }
+              }
             }
           } else {
             console.error('User is not a teacher')
@@ -1101,8 +1361,34 @@ export default {
       }
     })
 
-    const createChart = (chartRef, data, options = {}) => {
-      const defaultOptions = {
+    const createChart = (chartRef, data) => {
+      // Destroy existing chart if it exists
+      if (chartRef.value) {
+        const existingChart = Chart.getChart(chartRef.value);
+        if (existingChart) {
+          existingChart.destroy();
+        }
+      }
+
+      const chartColors = {
+        Quiz: '#4e73df',
+        Activity: '#1cc88a',
+        'Performance Task': '#f6c23e'
+      };
+
+      const chartConfig = {
+        type: 'bar',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            data: data.scores,
+            backgroundColor: chartColors[data.type],
+            borderRadius: 6,
+            maxBarThickness: 40,
+            borderSkipped: false
+          }]
+        },
+        options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -1150,31 +1436,11 @@ export default {
               },
               callback: function(value) {
                 return value + '%';
+                }
               }
             }
           }
         }
-      };
-
-      const chartColors = {
-        Quiz: '#4e73df',
-        Activity: '#1cc88a',
-        'Performance Task': '#f6c23e'
-      };
-
-      const chartConfig = {
-        type: 'bar',
-        data: {
-          labels: data.labels,
-          datasets: [{
-            data: data.scores,
-            backgroundColor: chartColors[data.type],
-            borderRadius: 6,
-            maxBarThickness: 40,
-            borderSkipped: false
-          }]
-        },
-        options: { ...defaultOptions, ...options }
       };
 
       return new Chart(chartRef.value, chartConfig);
@@ -1217,6 +1483,274 @@ export default {
       });
     };
 
+    // Add these to the setup function
+    const showEditAssessmentModal = ref(false)
+    const editingAssessment = ref({
+      type: '',
+      number: '',
+      maxScore: ''
+    })
+
+    const editAssessment = (assessment) => {
+      editingAssessment.value = { ...assessment }
+      showEditAssessmentModal.value = true
+    }
+
+    const handleEditAssessment = async () => {
+      try {
+        const token = store.state.auth.token
+        const response = await axios.put(
+          `http://localhost:8000/api/assessments/${editingAssessment.value._id}`,
+          {
+            type: editingAssessment.value.type,
+            number: editingAssessment.value.number,
+            maxScore: editingAssessment.value.maxScore
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        )
+
+        if (response.data) {
+          // Update the assessment in the local state
+          const index = assessments.value.findIndex(a => a._id === editingAssessment.value._id)
+          if (index !== -1) {
+            assessments.value[index] = {
+              ...response.data,
+              id: response.data._id
+            }
+          }
+
+          // Close modal and show success message
+          showEditAssessmentModal.value = false
+          alert('Assessment updated successfully!')
+        }
+      } catch (error) {
+        console.error('Failed to update assessment:', error)
+        alert('Failed to update assessment. Please try again.')
+      }
+    }
+
+    const handleDeleteAssessment = async () => {
+      if (!confirm('Are you sure you want to delete this assessment? This action cannot be undone.')) {
+        return
+      }
+
+      try {
+        const token = store.state.auth.token
+        await axios.delete(
+          `http://localhost:8000/api/assessments/${editingAssessment.value._id}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        )
+
+        // Remove the assessment from the local state
+        assessments.value = assessments.value.filter(a => a._id !== editingAssessment.value._id)
+        
+        // Close modal and show success message
+        showEditAssessmentModal.value = false
+        alert('Assessment deleted successfully!')
+      } catch (error) {
+        console.error('Failed to delete assessment:', error)
+        alert('Failed to delete assessment. Please try again.')
+      }
+    }
+
+    // Fetch available years for the teacher
+    const fetchAvailableYears = async () => {
+      try {
+        const token = store.state.auth.token
+        const teacherId = store.state.auth.user?._id || user.value?._id
+
+        if (!teacherId) return
+
+        const response = await axios.get('http://localhost:8000/api/teacher-class-records', {
+          params: { teacherId },
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+
+        // Extract unique years from teacher's records
+        const years = new Set(response.data.map(record => record.year))
+        availableYears.value = Array.from(years).sort()
+
+        // If no year is selected but we have years available, select the first one
+        if (!selectedYear.value && availableYears.value.length > 0) {
+          selectedYear.value = availableYears.value[0]
+        }
+      } catch (error) {
+        console.error('Failed to fetch available years:', error)
+      }
+    }
+
+    // Fetch available sections for the selected year
+    const fetchAvailableSections = async () => {
+      try {
+        const token = store.state.auth.token
+        const teacherId = store.state.auth.user?._id || user.value?._id
+
+        if (!teacherId || !selectedYear.value) {
+          availableSections.value = []
+          return
+        }
+
+        const response = await axios.get('http://localhost:8000/api/teacher-class-records', {
+          params: { 
+            teacherId,
+            year: selectedYear.value
+          },
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+
+        // Extract unique sections from teacher's records for the selected year
+        const sections = new Set(response.data.map(record => record.section))
+        availableSections.value = Array.from(sections).sort()
+
+        // If no section is selected but we have sections available, select the first one
+        if (!selectedSection.value && availableSections.value.length > 0) {
+          selectedSection.value = availableSections.value[0]
+        }
+      } catch (error) {
+        console.error('Failed to fetch available sections:', error)
+      }
+    }
+
+    // Add computed property for filtered assessments
+    const filteredAssessments = computed(() => {
+      if (!selectedStudent.value?.assessments) return [];
+
+      return selectedStudent.value.assessments.filter(assessment => {
+        let passesTypeFilter = true;
+        let passesDateFilter = true;
+
+        // Apply assessment type filter
+        if (selectedAssessmentType.value) {
+          passesTypeFilter = assessment.type === selectedAssessmentType.value;
+        }
+
+        // Apply date filter
+        if (historyDateRange.value.start && historyDateRange.value.end) {
+          const assessmentDate = new Date(assessment.date);
+          const startDate = new Date(historyDateRange.value.start);
+          const endDate = new Date(historyDateRange.value.end);
+          passesDateFilter = assessmentDate >= startDate && assessmentDate <= endDate;
+        }
+
+        return passesTypeFilter && passesDateFilter;
+      });
+    });
+
+    // Add filter handling functions
+    const applyChartDateFilter = () => {
+      if (chartDateRange.value.start && chartDateRange.value.end) {
+        // Destroy existing charts first
+        [quizChart, activityChart, performanceChart].forEach(chartRef => {
+          if (chartRef.value) {
+            const existingChart = Chart.getChart(chartRef.value);
+            if (existingChart) {
+              existingChart.destroy();
+            }
+          }
+        });
+
+        // Filter assessments by date range
+        const filteredAssessments = selectedStudent.value.assessments.filter(assessment => {
+          const assessmentDate = new Date(assessment.date);
+          const startDate = new Date(chartDateRange.value.start);
+          const endDate = new Date(chartDateRange.value.end);
+          return assessmentDate >= startDate && assessmentDate <= endDate;
+        });
+
+        // Group assessments by type
+        const assessmentsByType = {
+          Quiz: [],
+          Activity: [],
+          'Performance Task': []
+        };
+
+        filteredAssessments.forEach(assessment => {
+          const score = assessment.scores[selectedStudent.value.studentNumber];
+          if (assessment.type in assessmentsByType) {
+            assessmentsByType[assessment.type].push({
+              number: assessment.number,
+              score: score || 0,
+              maxScore: assessment.maxScore,
+              date: assessment.date,
+              type: assessment.type
+            });
+          }
+        });
+
+        // Wait for the next tick to ensure the canvases are ready
+        nextTick(() => {
+          // Update charts with filtered data
+          Object.entries(assessmentsByType).forEach(([type, data]) => {
+            if (data.length > 0) {
+              const chartRef = type === 'Quiz' ? quizChart :
+                              type === 'Activity' ? activityChart :
+                              performanceChart;
+
+              const sortedData = data.sort((a, b) => new Date(a.date) - new Date(b.date));
+              
+              if (chartRef.value) {
+                createChart(chartRef, {
+                  type,
+                  labels: sortedData.map(a => formatDate(a.date)),
+                  scores: sortedData.map(a => (a.score / a.maxScore * 100).toFixed(1))
+                });
+              }
+            }
+          });
+        });
+      }
+      showChartDateFilter.value = false;
+    };
+
+    const clearChartDateFilter = () => {
+      chartDateRange.value = { start: '', end: '' };
+      // Destroy existing charts first
+      [quizChart, activityChart, performanceChart].forEach(chartRef => {
+        if (chartRef.value) {
+          const existingChart = Chart.getChart(chartRef.value);
+          if (existingChart) {
+            existingChart.destroy();
+          }
+        }
+      });
+      // Wait for the next tick before recreating charts
+      nextTick(() => {
+        updateCharts();
+      });
+      showChartDateFilter.value = false;
+    };
+
+    const applyHistoryDateFilter = () => {
+      showHistoryDateFilter.value = false;
+    };
+
+    const clearHistoryDateFilter = () => {
+      historyDateRange.value = { start: '', end: '' };
+      showHistoryDateFilter.value = false;
+    };
+
+    // Watch for assessment type changes
+    watch(selectedAssessmentType, () => {
+      // The computed filteredAssessments will automatically update
+    });
+
+    const handleLogout = async () => {
+      try {
+        await store.dispatch('logout')
+        router.push('/login')
+      } catch (error) {
+        console.error('Logout failed:', error)
+      }
+    }
+
     return {
       selectedYear,
       selectedSection,
@@ -1226,6 +1760,8 @@ export default {
       assessments,
       filteredStudents,
       teacherSubjects,
+      availableYears,
+      availableSections,
       showAddAssessmentModal,
       newAssessment,
       selectedStudent,
@@ -1253,15 +1789,34 @@ export default {
       applyFilters,
       getAssessmentBadgeClass,
       getScoreClass,
-      updateCharts
+      updateCharts,
+      showEditAssessmentModal,
+      editingAssessment,
+      editAssessment,
+      handleEditAssessment,
+      handleDeleteAssessment,
+      selectedAssessmentType,
+      showChartDateFilter,
+      showHistoryDateFilter,
+      chartDateRange,
+      historyDateRange,
+      filteredAssessments,
+      applyChartDateFilter,
+      clearChartDateFilter,
+      applyHistoryDateFilter,
+      clearHistoryDateFilter,
+      handleLogout
     }
   }
 }
 </script>
 
 <style scoped>
+/* Remove the top-navbar styles */
 .class-records {
-  padding: 20px;
+  padding: 1.5rem 2rem;
+  background: #f8f9fa;
+  min-height: calc(100vh - 70px);
 }
 
 .card {
@@ -1280,15 +1835,17 @@ export default {
   background-color: #f8f9fa;
   color: #666;
   font-weight: 600;
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   border-top: none;
   white-space: nowrap;
+  text-align: left;
 }
 
 .table td {
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   vertical-align: middle;
   border-color: #eee;
+  text-align: left;
 }
 
 .table tbody tr:hover {
@@ -1419,18 +1976,114 @@ export default {
   gap: 0.5rem;
 }
 
+.modal-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
 .modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1040;
+  z-index: 9998;
+  cursor: pointer;
 }
 
-.modal {
-  z-index: 1050;
+.modal-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 1.75rem;
+  pointer-events: auto;
+}
+
+.modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: #fff;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  z-index: 10001;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: #203464;
+  color: #fff;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+}
+
+.modal-body {
+  position: relative;
+  flex: 1 1 auto;
+  padding: 1.5rem;
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+}
+
+.btn-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.5rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-close:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-close::before {
+  content: "×";
+  position: absolute;
+  font-size: 24px;
+  line-height: 1;
+  color: white;
+}
+
+/* Ensure form-check elements are clickable in the modal */
+.modal .form-check {
+  position: relative;
+  z-index: 1061;
 }
 
 /* Student Details Modal Styles */
@@ -1571,7 +2224,7 @@ export default {
 }
 
 .modal-header {
-  background: #203464 !important;
+  background-color: #203464 !important;
   color: #fff !important;
   border-bottom: none;
 }
@@ -1585,35 +2238,274 @@ export default {
   opacity: 1;
 }
 
-.score-excellent {
-  color: #1cc88a;
-  font-weight: 600;
-  background: rgba(28, 200, 138, 0.1);
-  padding: 0.3em 0.6em;
-  border-radius: 6px;
+.score-input {
+  width: 60px !important;
+  padding: 0.25rem !important;
+  text-align: center;
+  font-size: 0.875rem;
+  height: auto !important;
+  min-height: 30px;
+  margin: 0 auto;
+  display: block;
 }
 
-.score-good {
-  color: #4e73df;
-  font-weight: 600;
-  background: rgba(78, 115, 223, 0.1);
-  padding: 0.3em 0.6em;
-  border-radius: 6px;
+.score-input::-webkit-inner-spin-button,
+.score-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-.score-average {
-  color: #f6c23e;
-  font-weight: 600;
-  background: rgba(246, 194, 62, 0.1);
-  padding: 0.3em 0.6em;
-  border-radius: 6px;
+.score-input[type=number] {
+  -moz-appearance: textfield;
 }
 
-.score-poor {
-  color: #e74a3b;
-  font-weight: 600;
-  background: rgba(231, 74, 59, 0.1);
-  padding: 0.3em 0.6em;
+/* Table alignment styles */
+.table th, .table td {
+  text-align: center !important;
+  vertical-align: middle !important;
+  padding: 0.75rem 0.5rem !important;
+}
+
+.table td:nth-child(-n+3),
+.table th:nth-child(-n+3) {
+  text-align: left !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.assessment-header {
+  text-align: center;
+  cursor: pointer;
+  padding: 0.25rem;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+  min-width: 100px;
+  max-width: 120px;
+  margin: 0 auto;
+  display: block;
+}
+
+.assessment-header:hover {
+  background-color: rgba(0, 51, 102, 0.05);
+}
+
+.assessment-header small {
+  display: block;
+  color: #6c757d;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+td:has(.score-input) {
+  text-align: center !important;
+  vertical-align: middle !important;
+  padding: 0.5rem 0.25rem !important;
+}
+
+/* Add styles for filters */
+.date-filter button {
+  font-size: 0.875rem;
+  padding: 0.375rem 1rem;
   border-radius: 6px;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transition: all 0.2s ease;
+}
+
+.date-filter button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.assessment-filter .form-select {
+  font-size: 0.875rem;
+  padding: 0.25rem 2rem 0.25rem 0.75rem;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  min-width: 120px;
+}
+
+.assessment-filter .form-select:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.1);
+}
+
+.assessment-filter .form-select option {
+  background-color: #203464;
+  color: #fff;
+}
+
+.performance-header,
+.history-header {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.5rem;
+}
+
+.modal-dialog {
+  margin: 1.75rem auto;
+}
+
+.modal-content {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.modal-header {
+  background-color: #203464;
+  color: #fff;
+  border-bottom: none;
+  padding: 1rem 1.5rem;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.form-label {
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.form-control[type="date"] {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+}
+
+.form-control[type="date"]:focus {
+  border-color: #203464;
+  box-shadow: 0 0 0 0.2rem rgba(32, 52, 100, 0.25);
+}
+
+.btn-close {
+  color: #fff;
+  opacity: 0.75;
+}
+
+.btn-close:hover {
+  opacity: 1;
+}
+
+/* Add specific class for date filter modals */
+.modal-dialog.date-filter-dialog {
+  max-width: 400px;
+}
+
+/* Update modal styles */
+.modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: #fff;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  z-index: 10001;
+}
+
+.modal-body {
+  position: relative;
+  flex: 1 1 auto;
+  padding: 1.5rem;
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+}
+
+/* Date filter specific styles */
+.date-filter button {
+  font-size: 0.875rem;
+  padding: 0.375rem 1rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transition: all 0.2s ease;
+}
+
+.date-filter button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+/* Form control styles for date inputs */
+input[type="date"].form-control {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+input[type="date"].form-control:focus {
+  border-color: #203464;
+  box-shadow: 0 0 0 0.2rem rgba(32, 52, 100, 0.25);
+}
+
+/* Update modal styles */
+.modal-sm {
+  max-width: 400px !important;
+  margin: 1.75rem auto;
+}
+
+.modal-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+  cursor: pointer;
+}
+
+.modal-dialog {
+  position: relative;
+  width: 100%;
+  pointer-events: auto;
+}
+
+.modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: #fff;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  z-index: 10001;
 }
 </style> 

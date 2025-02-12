@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const TeacherClassRecord = require('../models/TeacherClassRecord');
 const auth = require('../middleware/auth');
+const mongoose = require('mongoose');
 
 // Create a new class record
 router.post('/create', auth, async (req, res) => {
@@ -200,6 +201,208 @@ router.post('/add-assessment', auth, async (req, res) => {
   } catch (error) {
     console.error('Error adding assessment:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get students for attendance
+router.get('/students-for-attendance', auth, async (req, res) => {
+  try {
+    const { teacherId, year, section, subject } = req.query;
+    
+    console.log('Received request for students with params:', {
+      teacherId,
+      year,
+      section,
+      subject
+    });
+    
+    if (!teacherId || !year || !section || !subject) {
+      console.log('Missing required parameters:', {
+        hasTeacherId: !!teacherId,
+        hasYear: !!year,
+        hasSection: !!section,
+        hasSubject: !!subject
+      });
+      return res.status(400).json({ 
+        message: 'TeacherId, year, section, and subject are required',
+        missingFields: {
+          teacherId: !teacherId,
+          year: !year,
+          section: !section,
+          subject: !subject
+        }
+      });
+    }
+
+    console.log('Looking for class record with query:', {
+      teacherId,
+      year,
+      section,
+      subject
+    });
+
+    const classRecord = await TeacherClassRecord.findOne({
+      teacherId,
+      year,
+      section,
+      subject
+    }).select('students year section subject');
+
+    console.log('Class record found:', classRecord ? 'Yes' : 'No');
+    if (classRecord) {
+      console.log('Number of students in record:', classRecord.students?.length || 0);
+    }
+
+    if (!classRecord) {
+      return res.status(404).json({ 
+        message: 'Class record not found',
+        query: {
+          teacherId,
+          year,
+          section,
+          subject
+        }
+      });
+    }
+
+    // Sort students by lastName then firstName
+    const sortedStudents = [...classRecord.students]
+      .sort((a, b) => {
+        const lastNameComparison = a.lastName.localeCompare(b.lastName);
+        if (lastNameComparison !== 0) return lastNameComparison;
+        return a.firstName.localeCompare(b.firstName);
+      })
+      .map(student => ({
+        studentId: student.studentId,
+        studentNumber: student.studentNumber,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        attendance: student.attendance || [],
+        year: classRecord.year,
+        section: classRecord.section,
+        subject: classRecord.subject
+      }));
+
+    console.log('Sending response with sorted students:', sortedStudents.length);
+
+    res.json({
+      students: sortedStudents,
+      year: classRecord.year,
+      section: classRecord.section,
+      subject: classRecord.subject
+    });
+  } catch (error) {
+    console.error('Error fetching students for attendance:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// Get available subjects for teacher
+router.get('/available-subjects', auth, async (req, res) => {
+  try {
+    const { teacherId, year, section } = req.query;
+    
+    console.log('Received request for subjects with params:', {
+      teacherId,
+      year,
+      section
+    });
+    
+    if (!teacherId) {
+      console.log('TeacherId is missing from request');
+      return res.status(400).json({ 
+        message: 'TeacherId is required',
+        success: false
+      });
+    }
+
+    // Validate teacherId format
+    if (!mongoose.Types.ObjectId.isValid(teacherId)) {
+      console.log('Invalid teacherId format:', teacherId);
+      return res.status(400).json({
+        message: 'Invalid teacherId format',
+        success: false
+      });
+    }
+
+    // Build query
+    const query = { teacherId };
+    if (year) query.year = year;
+    if (section) query.section = section;
+
+    console.log('Finding records with query:', query);
+
+    // Find class records for this teacher with optional year/section filter
+    const records = await TeacherClassRecord.find(query);
+    console.log('Found records count:', records.length);
+    
+    if (!records || records.length === 0) {
+      console.log('No records found for query:', query);
+      return res.json({ 
+        subjects: [],
+        success: true,
+        message: 'No class records found for these criteria'
+      });
+    }
+
+    // Get unique subjects from filtered records
+    const subjects = [...new Set(records.map(record => record.subject))].filter(Boolean);
+    console.log('Extracted subjects:', subjects);
+
+    // Get student counts per subject for filtered records
+    const subjectCounts = subjects.map(subject => {
+      const recordsWithSubject = records.filter(r => r.subject === subject);
+      const studentCount = recordsWithSubject.reduce((total, record) => total + (record.students?.length || 0), 0);
+      return { subject, studentCount };
+    });
+    console.log('Subject counts:', subjectCounts);
+
+    res.json({ 
+      subjects,
+      subjectCounts,
+      success: true,
+      recordCount: records.length,
+      query
+    });
+  } catch (error) {
+    console.error('Error fetching available subjects:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      success: false
+    });
+  }
+});
+
+// Get teacher's sections and subjects
+router.get('/sections-subjects/:teacherId', auth, async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    const { year } = req.query;
+
+    const query = { teacherId };
+    if (year) query.year = year;
+
+    const records = await TeacherClassRecord.find(query);
+
+    // Extract unique sections and subjects
+    const sections = [...new Set(records.map(record => record.section))];
+    const subjects = [...new Set(records.map(record => record.subject))];
+
+    res.json({
+      sections,
+      subjects
+    });
+  } catch (error) {
+    console.error('Error fetching sections and subjects:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 });
 

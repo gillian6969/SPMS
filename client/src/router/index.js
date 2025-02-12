@@ -9,7 +9,11 @@ import TeacherDashboard from '../views/TeacherDashboard.vue'
 import StudentManagement from '../views/StudentManagement.vue'
 import ClassRecords from '../views/ClassRecords.vue'
 import Attendance from '../views/Attendance.vue'
-import Profile from '@/views/Profile.vue'
+import ViewProfile from '@/views/ViewProfile.vue'
+import EditProfile from '@/views/EditProfile.vue'
+import ChangePassword from '@/views/ChangePassword.vue'
+import DashboardLayout from '@/layouts/DashboardLayout.vue'
+import OTPVerification from '@/components/OTPVerification.vue'
 
 const routes = [
   {
@@ -23,46 +27,70 @@ const routes = [
     meta: { guest: true }
   },
   {
-    path: '/register',
-    name: 'Register',
-    component: Register,
-    meta: { requiresAuth: true, citHeadOnly: true }
+    path: '/verify-otp',
+    name: 'OTPVerification',
+    component: OTPVerification,
+    meta: { requiresOTP: true }
   },
   {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: Dashboard,
-    meta: { requiresAuth: true, citHeadOnly: true }
-  },
-  {
-    path: '/teacher-dashboard',
-    name: 'TeacherDashboard',
-    component: TeacherDashboard,
-    meta: { requiresAuth: true, teacherOnly: true }
-  },
-  {
-    path: '/student-management',
-    name: 'StudentManagement',
-    component: StudentManagement,
-    meta: { requiresAuth: true, citHeadOnly: true }
-  },
-  {
-    path: '/class-records',
-    name: 'ClassRecords',
-    component: ClassRecords,
-    meta: { requiresAuth: true, teacherOnly: true }
-  },
-  {
-    path: '/attendance',
-    name: 'Attendance',
-    component: Attendance,
-    meta: { requiresAuth: true, teacherOnly: true }
-  },
-  {
-    path: '/profile',
-    name: 'Profile',
-    component: Profile,
-    meta: { requiresAuth: true }
+    path: '/',
+    component: DashboardLayout,
+    children: [
+      {
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: Dashboard,
+        meta: { requiresAuth: true, citHeadOnly: true }
+      },
+      {
+        path: 'register',
+        name: 'Register',
+        component: Register,
+        meta: { requiresAuth: true, citHeadOnly: true }
+      },
+      {
+        path: 'teacher-dashboard',
+        name: 'TeacherDashboard',
+        component: TeacherDashboard,
+        meta: { requiresAuth: true, teacherOnly: true }
+      },
+      {
+        path: 'student-management',
+        name: 'StudentManagement',
+        component: StudentManagement,
+        meta: { requiresAuth: true, citHeadOnly: true }
+      },
+      {
+        path: 'class-records',
+        name: 'ClassRecords',
+        component: ClassRecords,
+        meta: { requiresAuth: true, teacherOnly: true }
+      },
+      {
+        path: 'attendance',
+        name: 'Attendance',
+        component: Attendance,
+        meta: { requiresAuth: true, teacherOnly: true }
+      },
+      {
+        path: 'profile/view',
+        name: 'ViewProfile',
+        component: ViewProfile,
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'profile/edit',
+        name: 'EditProfile',
+        component: EditProfile,
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'profile/password',
+        name: 'ChangePassword',
+        component: ChangePassword,
+        meta: { requiresAuth: true }
+      }
+    ]
   }
 ]
 
@@ -74,8 +102,17 @@ const router = createRouter({
 // Navigation Guards
 router.beforeEach((to, from, next) => {
   const isLoggedIn = store.getters.isLoggedIn
+  const requiresOTP = store.getters.requiresOTP
   const isCITHead = store.getters.isCITHead
   const isTeacher = store.getters.isTeacher
+
+  // Handle OTP verification
+  if (to.matched.some(record => record.meta.requiresOTP)) {
+    if (!requiresOTP) {
+      next('/login')
+      return
+    }
+  }
 
   // Routes that require authentication
   if (to.matched.some(record => record.meta.requiresAuth)) {

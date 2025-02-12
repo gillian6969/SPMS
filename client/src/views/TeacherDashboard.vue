@@ -217,11 +217,11 @@ export default {
     // Get teacher ID from store
     const getTeacherId = () => {
       const user = store.state.auth.user
-      if (!user || !user.id) {
+      if (!user || !user._id) {
         console.error('No teacher ID found in store')
         return null
       }
-      return user.id
+      return user._id
     }
 
     // Computed properties for data availability

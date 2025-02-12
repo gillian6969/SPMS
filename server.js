@@ -1,7 +1,10 @@
+const dotenv = require('dotenv');
+// Load environment variables first
+dotenv.config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const teacherClassRecordsRoutes = require('./routes/teacherClassRecords');
 const studentRoutes = require('./routes/students');
 const authRoutes = require('./routes/auth');
@@ -9,7 +12,11 @@ const userRoutes = require('./routes/users');
 const assessmentRoutes = require('./routes/assessments');
 const dashboardRoutes = require('./routes/dashboard');
 
-dotenv.config();
+// Verify environment variables are loaded
+console.log('Email configuration loaded:', {
+    EMAIL_USER: process.env.EMAIL_USER ? 'Set' : 'Not Set',
+    EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? 'Set' : 'Not Set'
+});
 
 const app = express();
 

@@ -119,4 +119,28 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// Update assessment details
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const { type, number, maxScore } = req.body;
+    
+    // Find and update the assessment
+    const assessment = await Assessment.findById(req.params.id);
+    if (!assessment) {
+      return res.status(404).json({ message: 'Assessment not found' });
+    }
+
+    // Update fields if provided
+    if (type) assessment.type = type;
+    if (number) assessment.number = number;
+    if (maxScore) assessment.maxScore = maxScore;
+
+    await assessment.save();
+    res.json(assessment);
+  } catch (error) {
+    console.error('Error updating assessment:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router; 

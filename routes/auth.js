@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const auth = require('../middleware/auth');
+const OTP = require('../models/OTP');
+const { generateOTP, sendOTPEmail } = require('../utils/emailService');
 
 // Middleware to check if user is CITHead
 const isCITHead = (req, res, next) => {
@@ -69,100 +71,108 @@ router.post('/register', auth, isCITHead, async (req, res) => {
 // Login for all users
 router.post('/login', async (req, res) => {
   try {
-    const { email, password, loginType } = req.body;
-    console.log('Login attempt for email:', email, 'loginType:', loginType);
+    const { email, password } = req.body;
 
-    // Find user by email
+    // Find user
     const user = await User.findOne({ email });
     if (!user) {
-      console.log('No user found with email:', email);
-      
-      // Only check for student if loginType is 'user'
-      if (loginType === 'user') {
-        const student = await Student.findOne({ email });
-        if (!student) {
-          console.log('No student found with email:', email);
-          return res.status(401).json({ message: 'Invalid credentials' });
-        }
-        
-        // Compare student password
-        const isMatch = await bcryptjs.compare(password, student.password);
-        console.log('Student password comparison result:', isMatch);
-        
-        if (!isMatch) {
-          return res.status(401).json({ message: 'Invalid credentials' });
-        }
-
-        // Generate token for student
-        const token = jwt.sign(
-          { 
-            userId: student._id,
-            role: 'student',
-            studentId: student.studentId
-          },
-          'your-secret-key',
-          { expiresIn: '24h' }
-        );
-
-        return res.json({
-          token,
-          user: {
-            id: student._id,
-            firstName: student.firstName,
-            lastName: student.lastName,
-            email: student.email,
-            role: 'student',
-            studentId: student.studentId
-          }
-        });
-      }
-      
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    console.log('User found:', user.email, 'Role:', user.role);
-    
-    // Validate login type
-    if (loginType === 'citHead' && user.role !== 'citHead') {
-      return res.status(403).json({ message: 'Access denied. Please use the Teacher/Student login.' });
-    }
-    
-    if (loginType === 'user' && user.role === 'citHead') {
-      return res.status(403).json({ message: 'Access denied. Please use the CIT Head login.' });
-    }
-    
-    // Compare user password using the model method
-    const isMatch = await user.comparePassword(password);
-    console.log('User password comparison result:', isMatch);
-    
+    // Validate password
+    const isMatch = await bcryptjs.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Generate token for user
+    // Generate OTP
+    const otp = generateOTP();
+    console.log('Generated OTP:', otp);
+    
+    // Save OTP to database
+    await OTP.create({
+      userId: user._id,
+      otp: otp
+    });
+    console.log('OTP saved to database');
+
+    // Send OTP via email
+    console.log('Attempting to send email to:', user.email);
+    const emailSent = await sendOTPEmail(user.email, otp);
+    console.log('Email sending result:', emailSent);
+    
+    if (!emailSent) {
+      return res.status(500).json({ message: 'Failed to send OTP email' });
+    }
+
+    // Create temporary token for OTP verification
+    const tempToken = jwt.sign(
+      { userId: user._id },
+      'your-secret-key',
+      { expiresIn: '5m' }
+    );
+
+    res.json({
+      message: 'OTP sent to your email',
+      tempToken,
+      requiresOTP: true
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Verify OTP endpoint
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { otp, tempToken } = req.body;
+
+    // Verify temporary token
+    const decoded = jwt.verify(tempToken, 'your-secret-key');
+    const userId = decoded.userId;
+
+    // Find OTP in database
+    const otpDoc = await OTP.findOne({ userId, otp });
+    if (!otpDoc) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    // Delete OTP document
+    await OTP.deleteOne({ _id: otpDoc._id });
+
+    // Find user with complete details
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      return res.status(400).json({ message: 'User not found' });
+    }
+
+    // Generate final authentication token
     const token = jwt.sign(
-      { 
-        userId: user._id,
-        role: user.role
-      },
+      { userId: user._id },
       'your-secret-key',
       { expiresIn: '24h' }
     );
 
+    // Return complete user data
     res.json({
       token,
       user: {
-        id: user._id,
+        _id: user._id,
+        id: user._id, // Adding id field for compatibility
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
         role: user.role,
-        teachingYear: user.teachingYear
+        teachingYear: user.teachingYear,
+        name: `${user.firstName} ${user.lastName}` // Adding formatted name
       }
     });
+
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
