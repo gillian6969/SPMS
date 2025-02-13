@@ -35,6 +35,29 @@
               <option v-for="subject in subjects" :key="subject" :value="subject">{{ subject }}</option>
             </select>
           </div>
+          <div class="mb-3">
+            <label class="form-label">Date Range</label>
+            <div class="d-flex gap-2">
+              <div class="flex-grow-1">
+                <label class="small text-muted">From</label>
+                <input 
+                  type="date" 
+                  class="form-control form-control-sm" 
+                  v-model="selectedStartDate"
+                  :max="today"
+                >
+              </div>
+              <div class="flex-grow-1">
+                <label class="small text-muted">To</label>
+                <input 
+                  type="date" 
+                  class="form-control form-control-sm" 
+                  v-model="selectedEndDate"
+                  :max="today"
+                >
+              </div>
+            </div>
+          </div>
           <div class="dropdown-divider"></div>
           <button class="btn btn-primary w-100" @click="applyFilters">Apply Filters</button>
         </div>
@@ -127,11 +150,11 @@
 
     <!-- Charts Row -->
     <div class="row mb-4">
-      <!-- Performance Chart -->
-      <div class="col-md-6">
+      <!-- Performance Distribution Chart -->
+      <div class="col-md-6 mb-4">
         <div class="chart-card">
           <div class="card-body">
-            <h5 class="card-title">Class Performance Distribution</h5>
+            <h5 class="card-title">Grade Distribution</h5>
             <div class="chart-container">
               <canvas ref="performanceChart"></canvas>
               <p v-if="!hasPerformanceData" class="no-data-message">No performance data available</p>
@@ -140,14 +163,40 @@
         </div>
       </div>
       
-      <!-- Attendance Chart -->
-      <div class="col-md-6">
+      <!-- Assessment Type Distribution -->
+      <div class="col-md-6 mb-4">
         <div class="chart-card">
           <div class="card-body">
-            <h5 class="card-title">Attendance Trends</h5>
+            <h5 class="card-title">Assessment Type Distribution</h5>
             <div class="chart-container">
-              <canvas ref="attendanceChart"></canvas>
-              <p v-if="!hasAttendanceData" class="no-data-message">No attendance data available</p>
+              <canvas ref="assessmentTypeChart"></canvas>
+              <p v-if="!hasPerformanceData" class="no-data-message">No assessment data available</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Trend Chart -->
+      <div class="col-md-6 mb-4">
+        <div class="chart-card">
+          <div class="card-body">
+            <h5 class="card-title">Performance Trends</h5>
+            <div class="chart-container">
+              <canvas ref="performanceTrendChart"></canvas>
+              <p v-if="!hasPerformanceData" class="no-data-message">No performance data available</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assessment Type Performance -->
+      <div class="col-md-6 mb-4">
+        <div class="chart-card">
+          <div class="card-body">
+            <h5 class="card-title">Performance by Assessment Type</h5>
+            <div class="chart-container">
+              <canvas ref="assessmentTypePerformanceChart"></canvas>
+              <p v-if="!hasPerformanceData" class="no-data-message">No performance data available</p>
             </div>
           </div>
         </div>
@@ -185,7 +234,7 @@
 </template>
 
 <script>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useStore } from 'vuex'
 import Chart from 'chart.js/auto'
 import axios from 'axios'
@@ -197,6 +246,9 @@ export default {
     const store = useStore()
     const performanceChart = ref(null)
     const attendanceChart = ref(null)
+    const assessmentTypeChart = ref(null)
+    const performanceTrendChart = ref(null)
+    const assessmentTypePerformanceChart = ref(null)
 
     // Data refs
     const totalStudents = ref(0)
@@ -210,9 +262,12 @@ export default {
     const subjects = ref([])
     
     // Filter refs
-    const selectedYear = ref('')
-    const selectedSection = ref('')
-    const selectedSubject = ref('')
+    const selectedYear = ref(localStorage.getItem('selectedYear') || '')
+    const selectedSection = ref(localStorage.getItem('selectedSection') || '')
+    const selectedSubject = ref(localStorage.getItem('selectedSubject') || '')
+    const selectedStartDate = ref('')
+    const selectedEndDate = ref('')
+    const today = computed(() => moment().format('YYYY-MM-DD'))
 
     // Get teacher ID from store
     const getTeacherId = () => {
@@ -236,14 +291,29 @@ export default {
         if (!teacherId) return
 
         const token = store.state.auth.token
-        const response = await axios.get(`http://localhost:8000/api/class-records/sections-subjects/${teacherId}`, {
-          params: { year },
+        console.log('Fetching sections and subjects for:', { teacherId, year })
+
+        // First get all class records to extract sections
+        const recordsResponse = await axios.get('http://localhost:8000/api/teacher-class-records', {
+          params: { 
+            teacherId,
+            year 
+          },
           headers: { 'Authorization': `Bearer ${token}` }
         })
 
-        if (response.data) {
-          sections.value = response.data.sections || []
-          subjects.value = response.data.subjects || []
+        if (recordsResponse.data) {
+          // Extract unique sections and subjects
+          const uniqueSections = [...new Set(recordsResponse.data.map(record => record.section))]
+          const uniqueSubjects = [...new Set(recordsResponse.data.map(record => record.subject))]
+          
+          sections.value = uniqueSections.sort()
+          subjects.value = uniqueSubjects.sort()
+          
+          console.log('Loaded sections and subjects:', {
+            sections: sections.value,
+            subjects: subjects.value
+          })
         }
       } catch (error) {
         console.error('Error fetching teacher sections and subjects:', error)
@@ -261,6 +331,7 @@ export default {
         sections.value = []
         subjects.value = []
       }
+      await fetchDashboardData()
     }
 
     const getFilterDisplay = () => {
@@ -273,144 +344,151 @@ export default {
 
     const fetchDashboardData = async () => {
       try {
-        const teacherId = store.state.auth.user._id
-        const token = store.state.auth.token
-
-        // Fetch class records for the teacher
-        const response = await axios.get(`http://localhost:8000/api/class-records`, {
-          params: { teacherId },
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-
-        console.log('Class Records:', response.data) // Debug log
-
-        const classRecords = response.data
-
-        if (Array.isArray(classRecords)) {
-          // Count total students from class records
-          const uniqueStudentIds = new Set()
-          const uniqueSections = new Set()
-          const uniqueSubjects = new Set()
-
-          classRecords.forEach(record => {
-            // Count unique students
-            if (record.students && Array.isArray(record.students)) {
-              record.students.forEach(student => {
-                if (student && student.studentId) {
-                  uniqueStudentIds.add(student.studentId)
-                }
-              })
-            }
-
-            // Add section to unique sections set
-            if (record.section) {
-              uniqueSections.add(record.section)
-            }
-
-            // Add subject to unique subjects set
-            if (record.subject) {
-              uniqueSubjects.add(record.subject)
-            }
-          })
-
-          // Update the reactive refs
-          totalStudents.value = uniqueStudentIds.size
-          totalSections.value = uniqueSections.size
-          totalSubjects.value = uniqueSubjects.size
-
-          console.log('Counts:', {
-            students: uniqueStudentIds.size,
-            sections: uniqueSections.size,
-            subjects: uniqueSubjects.size,
-            uniqueStudentIds: Array.from(uniqueStudentIds)
-          }) // Debug log
+        const teacherId = getTeacherId();
+        if (!teacherId) {
+          console.error('No teacher ID found');
+          return;
         }
 
-        // Fetch additional dashboard stats
-        const statsResponse = await axios.get(`http://localhost:8000/api/dashboard/teacher/${teacherId}/stats`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-
-        if (statsResponse.data) {
-          averageAttendance.value = statsResponse.data.averageAttendance || 0
-          averageScore.value = statsResponse.data.averageScore || 0
-          assessmentCompletion.value = statsResponse.data.assessmentCompletion || 0
-          recentActivities.value = statsResponse.data.recentActivities || []
+        const token = store.state.auth.token;
+        if (!token) {
+          console.error('No auth token found');
+          return;
         }
 
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error)
-        totalStudents.value = 0
-        totalSections.value = 0
-        totalSubjects.value = 0
-      }
-    }
+        console.log('Fetching dashboard data with params:', {
+          teacherId,
+          year: selectedYear.value,
+          section: selectedSection.value,
+          subject: selectedSubject.value,
+          startDate: selectedStartDate.value,
+          endDate: selectedEndDate.value
+        });
 
-    const applyFilters = async () => {
-      try {
-        const teacherId = store.state.auth.user._id
-        const token = store.state.auth.token
-
-        // Fetch filtered class records
-        const response = await axios.get(`http://localhost:8000/api/class-records/teacher/${teacherId}`, {
+        const response = await axios.get(`http://localhost:8000/api/dashboard/teacher/${teacherId}/stats`, {
           params: {
             year: selectedYear.value,
             section: selectedSection.value,
-            subject: selectedSubject.value
+            subject: selectedSubject.value,
+            startDate: selectedStartDate.value,
+            endDate: selectedEndDate.value
           },
           headers: { 'Authorization': `Bearer ${token}` }
-        })
+        });
 
-        console.log('Filtered Class Records:', response.data) // Debug log
+        console.log('Dashboard data received:', response.data);
 
-        const filteredRecords = response.data
+        if (response.data) {
+          // Update stats
+          totalStudents.value = response.data.totalStudents || 0;
+          totalSections.value = response.data.totalSections || 0;
+          totalSubjects.value = response.data.totalSubjects || 0;
+          averageAttendance.value = response.data.averageAttendance || 0;
+          averageScore.value = response.data.averageScore || 0;
+          assessmentCompletion.value = response.data.assessmentCompletion?.overall || 0;
+          recentActivities.value = response.data.recentActivities || [];
 
-        if (Array.isArray(filteredRecords)) {
-          // Count students from filtered records
-          let studentCount = 0
-          const uniqueSections = new Set()
-          const uniqueSubjects = new Set()
+          // Log data before updating charts
+          console.log('Performance Distribution:', response.data.performanceDistribution);
+          console.log('Assessment Type Distribution:', response.data.assessmentTypeDistribution);
+          console.log('Performance Trends:', response.data.performanceTrends);
+          console.log('Assessment Completion by Type:', response.data.assessmentCompletion?.byType);
 
-          filteredRecords.forEach(record => {
-            // Count students
-            if (record.students && Array.isArray(record.students)) {
-              studentCount += record.students.length
-            }
+          // Update charts with new data
+          if (Array.isArray(response.data.performanceDistribution)) {
+            updatePerformanceChart(response.data);
+          } else {
+            console.warn('Invalid performance distribution data:', response.data.performanceDistribution);
+            updatePerformanceChart({
+              performanceDistribution: [0, 0, 0, 0, 0]
+            });
+          }
 
-            // Add section to unique sections
-            if (record.section) {
-              uniqueSections.add(record.section)
-            }
+          if (Array.isArray(response.data.assessmentTypeDistribution)) {
+            updateAssessmentTypeChart(response.data.assessmentTypeDistribution);
+          } else {
+            console.warn('Invalid assessment type distribution data:', response.data.assessmentTypeDistribution);
+            updateAssessmentTypeChart([
+              { type: 'Quiz', percentage: 0 },
+              { type: 'Activity', percentage: 0 },
+              { type: 'Performance Task', percentage: 0 }
+            ]);
+          }
 
-            // Add subject to unique subjects
-            if (record.subject) {
-              uniqueSubjects.add(record.subject)
-            }
-          })
+          if (Array.isArray(response.data.performanceTrends)) {
+            updatePerformanceTrendChart(response.data.performanceTrends);
+          } else {
+            console.warn('Invalid performance trends data:', response.data.performanceTrends);
+            updatePerformanceTrendChart([]);
+          }
 
-          // Update the counts
-          totalStudents.value = studentCount
-          totalSections.value = uniqueSections.size
-          totalSubjects.value = uniqueSubjects.size
-
-          console.log('Filtered Counts:', {
-            students: studentCount,
-            sections: uniqueSections.size,
-            subjects: uniqueSubjects.size
-          }) // Debug log
+          if (response.data.assessmentCompletion?.byType) {
+            updateAssessmentTypePerformanceChart(response.data);
+          } else {
+            console.warn('Invalid assessment completion data:', response.data.assessmentCompletion);
+            updateAssessmentTypePerformanceChart({
+              assessmentCompletion: {
+                byType: {
+                  quiz: 0,
+                  activity: 0,
+                  performancetask: 0
+                }
+              }
+            });
+          }
         }
-
       } catch (error) {
-        console.error('Error applying filters:', error)
+        console.error('Error fetching dashboard data:', error);
+        if (error.response) {
+          console.error('Error response:', error.response.data);
+        }
+        
+        // Reset data on error
+        totalStudents.value = 0;
+        totalSections.value = 0;
+        totalSubjects.value = 0;
+        averageAttendance.value = 0;
+        averageScore.value = 0;
+        assessmentCompletion.value = 0;
+        recentActivities.value = [];
+        
+        // Update charts with empty data
+        updatePerformanceChart({
+          performanceDistribution: [0, 0, 0, 0, 0]
+        });
+        updateAssessmentTypeChart([
+          { type: 'Quiz', percentage: 0 },
+          { type: 'Activity', percentage: 0 },
+          { type: 'Performance Task', percentage: 0 }
+        ]);
+        updatePerformanceTrendChart([]);
+        updateAssessmentTypePerformanceChart({
+          assessmentCompletion: {
+            byType: {
+              quiz: 0,
+              activity: 0,
+              performancetask: 0
+            }
+          }
+        });
       }
     }
 
     const updatePerformanceChart = (data) => {
-      const ctx = performanceChart.value.getContext('2d')
-      const existingChart = Chart.getChart(ctx)
-      if (existingChart) {
-        existingChart.destroy()
-      }
+      if (!performanceChart.value) return;
+      
+      const ctx = performanceChart.value.getContext('2d');
+      if (!ctx) return;
+
+      const existingChart = Chart.getChart(ctx);
+      if (existingChart) existingChart.destroy();
+
+      // Process performance distribution data
+      const performanceData = Array.isArray(data.performanceDistribution) 
+        ? data.performanceDistribution 
+        : [0, 0, 0, 0, 0];
+      
+      console.log('Performance distribution data:', performanceData);
 
       new Chart(ctx, {
         type: 'bar',
@@ -418,9 +496,16 @@ export default {
           labels: ['90-100', '80-89', '70-79', '60-69', 'Below 60'],
           datasets: [{
             label: 'Number of Students',
-            data: data,
-            backgroundColor: '#003366',
-            borderRadius: 4
+            data: performanceData,
+            backgroundColor: [
+              'rgba(52, 211, 153, 0.8)',  // Green for highest
+              'rgba(59, 130, 246, 0.8)',  // Blue
+              'rgba(251, 191, 36, 0.8)',  // Yellow
+              'rgba(251, 146, 60, 0.8)',  // Orange
+              'rgba(239, 68, 68, 0.8)'    // Red for lowest
+            ],
+            borderWidth: 1,
+            borderRadius: 5
           }]
         },
         options: {
@@ -429,11 +514,24 @@ export default {
           plugins: {
             legend: {
               display: false
+            },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const value = context.raw || 0;
+                  const total = performanceData.reduce((a, b) => a + (b || 0), 0);
+                  const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                  return `${value} students (${percentage}%)`;
+                }
+              }
             }
           },
           scales: {
             y: {
               beginAtZero: true,
+              ticks: {
+                stepSize: 1
+              },
               title: {
                 display: true,
                 text: 'Number of Students'
@@ -441,27 +539,105 @@ export default {
             }
           }
         }
-      })
-    }
+      });
+    };
 
-    const updateAttendanceChart = (data) => {
-      const ctx = attendanceChart.value.getContext('2d')
-      const existingChart = Chart.getChart(ctx)
-      if (existingChart) {
-        existingChart.destroy()
+    const updateAssessmentTypeChart = (data) => {
+      if (!assessmentTypeChart.value) return;
+      
+      const ctx = assessmentTypeChart.value.getContext('2d');
+      if (!ctx) return;
+
+      const existingChart = Chart.getChart(ctx);
+      if (existingChart) existingChart.destroy();
+
+      // Process the assessment type distribution data
+      const labels = data.labels || [];
+      const datasets = data.datasets || [];
+      
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: datasets.map((dataset, index) => ({
+            label: dataset.type,
+            data: dataset.data,
+            backgroundColor: [
+              'rgba(52, 211, 153, 0.8)',  // Green
+              'rgba(59, 130, 246, 0.8)',  // Blue
+              'rgba(251, 191, 36, 0.8)'   // Yellow
+            ][index],
+            borderWidth: 1
+          }))
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true,
+              ticks: {
+                maxRotation: 45,
+                minRotation: 45
+              }
+            },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Number of Assessments'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label: (context) => `${context.dataset.label}: ${context.raw || 0} assessments`
+              }
+            }
+          }
+        }
+      });
+    };
+
+    const updatePerformanceTrendChart = (data) => {
+      if (!performanceTrendChart.value) {
+        console.warn('Performance trend chart reference not found');
+        return;
       }
+      
+      const ctx = performanceTrendChart.value.getContext('2d');
+      if (!ctx) {
+        console.warn('Could not get 2d context for performance trend chart');
+        return;
+      }
+
+      const existingChart = Chart.getChart(ctx);
+      if (existingChart) {
+        existingChart.destroy();
+      }
+
+      // Ensure data is valid
+      const validData = Array.isArray(data) ? data : [];
+      console.log('Creating performance trend chart with data:', validData);
 
       new Chart(ctx, {
         type: 'line',
         data: {
-          labels: data.map(t => moment(t.date).format('MMM D')),
+          labels: validData.map(d => moment(d.date).format('MMM D, YYYY')),
           datasets: [{
-            label: 'Attendance Rate',
-            data: data.map(t => t.rate),
-            borderColor: '#003366',
-            backgroundColor: 'rgba(0, 51, 102, 0.1)',
+            label: 'Average Score',
+            data: validData.map(d => Number(d.score) || 0),
+            borderColor: '#4CAF50',
+            backgroundColor: 'rgba(76, 175, 80, 0.1)',
             tension: 0.4,
-            fill: true
+            fill: true,
+            pointRadius: 4,
+            pointHoverRadius: 6
           }]
         },
         options: {
@@ -470,6 +646,139 @@ export default {
           plugins: {
             legend: {
               display: false
+            },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const dataPoint = validData[context.dataIndex];
+                  return `${dataPoint.name}: ${(context.raw || 0).toFixed(1)}%`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: {
+                stepSize: 20,
+                font: {
+                  size: 12
+                }
+              },
+              title: {
+                display: true,
+                text: 'Average Score (%)',
+                font: {
+                  size: 14,
+                  weight: 'bold'
+                }
+              }
+            },
+            x: {
+              ticks: {
+                font: {
+                  size: 12
+                },
+                maxRotation: 45,
+                minRotation: 45
+              }
+            }
+          }
+        }
+      });
+    };
+
+    const updateAssessmentTypePerformanceChart = (data) => {
+      if (!assessmentTypePerformanceChart.value) return;
+      
+      const ctx = assessmentTypePerformanceChart.value.getContext('2d');
+      if (!ctx) return;
+
+      const existingChart = Chart.getChart(ctx);
+      if (existingChart) existingChart.destroy();
+
+      // Process the performance trends data by assessment type
+      const trendsByType = {
+        Quiz: [],
+        Activity: [],
+        'Performance Task': []
+      };
+
+      // Process performance trends data
+      if (Array.isArray(data.performanceTrends)) {
+        data.performanceTrends.forEach(trend => {
+          const type = trend.type || trend.name;
+          if (type in trendsByType) {
+            trendsByType[type].push({
+              date: new Date(trend.date),
+              score: parseFloat(trend.score) || 0
+            });
+          }
+        });
+      }
+
+      // Sort data points by date for each type
+      Object.keys(trendsByType).forEach(type => {
+        trendsByType[type].sort((a, b) => a.date - b.date);
+      });
+
+      // Get unique dates across all types
+      const allDates = [...new Set(
+        Object.values(trendsByType)
+          .flat()
+          .map(item => item.date)
+      )].sort((a, b) => a - b);
+
+      // Create datasets
+      const datasets = Object.entries(trendsByType).map(([type, data], index) => {
+        const colors = [
+          'rgb(52, 211, 153)',   // Green for Quiz
+          'rgb(59, 130, 246)',   // Blue for Activity
+          'rgb(251, 191, 36)'    // Yellow for Performance Task
+        ];
+        const color = colors[index];
+
+        return {
+          label: type,
+          data: allDates.map(date => {
+            const point = data.find(d => d.date.getTime() === date.getTime());
+            return point ? point.score : null;
+          }),
+          borderColor: color,
+          backgroundColor: color.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          spanGaps: true // This will connect points even if there are null values
+        };
+      });
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: allDates.map(date => moment(date).format('MMM D, YYYY')),
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            intersect: false,
+            mode: 'index'
+          },
+          plugins: {
+            legend: {
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const value = context.raw !== null ? context.raw.toFixed(1) : 'N/A';
+                  return `${context.dataset.label}: ${value}%`;
+                }
+              }
             }
           },
           scales: {
@@ -478,21 +787,109 @@ export default {
               max: 100,
               title: {
                 display: true,
-                text: 'Attendance Rate (%)'
+                text: 'Score (%)'
               }
+            },
+            x: {
+              ticks: {
+                maxRotation: 45,
+                minRotation: 45
             }
           }
         }
-      })
     }
+      });
+    };
 
     const formatDate = (date) => {
       return moment(date).format('MMM D, YYYY')
     }
 
-    onMounted(async () => {
-      await fetchTeacherSectionsAndSubjects()
+    const applyFilters = async () => {
+      // Save selected values to localStorage
+      if (selectedYear.value) {
+        localStorage.setItem('selectedYear', selectedYear.value)
+      } else {
+        localStorage.removeItem('selectedYear')
+      }
+
+      if (selectedSection.value) {
+        localStorage.setItem('selectedSection', selectedSection.value)
+      } else {
+        localStorage.removeItem('selectedSection')
+      }
+
+      if (selectedSubject.value) {
+        localStorage.setItem('selectedSubject', selectedSubject.value)
+      } else {
+        localStorage.removeItem('selectedSubject')
+      }
+
       await fetchDashboardData()
+    }
+
+    // Watch for filter changes
+    watch(selectedYear, handleYearChange)
+    watch([selectedSection, selectedSubject], applyFilters)
+    watch([selectedStartDate, selectedEndDate], () => {
+      if (selectedStartDate.value && selectedEndDate.value) {
+        // Validate date range
+        const start = moment(selectedStartDate.value);
+        const end = moment(selectedEndDate.value);
+        
+        if (end.isBefore(start)) {
+          selectedEndDate.value = selectedStartDate.value;
+        }
+        
+        fetchDashboardData();
+      }
+    })
+
+    onMounted(async () => {
+      if (store.state.auth.user?._id && store.state.auth.token) {
+        console.log('Component mounted, initializing...');
+        
+        // Wait for the next tick to ensure DOM elements are rendered
+        await nextTick();
+        
+        try {
+          // Initialize empty charts first
+          console.log('Initializing empty charts...');
+          
+          updatePerformanceChart({
+            performanceDistribution: [0, 0, 0, 0, 0]
+          });
+          updateAssessmentTypeChart([
+            { type: 'Quiz', percentage: 0 },
+            { type: 'Activity', percentage: 0 },
+            { type: 'Performance Task', percentage: 0 }
+          ]);
+          updatePerformanceTrendChart([]);
+          updateAssessmentTypePerformanceChart({
+            assessmentCompletion: {
+              byType: {
+                quiz: 0,
+                activity: 0,
+                performancetask: 0
+              }
+            }
+          });
+          
+          console.log('Empty charts initialized');
+          
+          // Fetch sections and subjects
+          await fetchTeacherSectionsAndSubjects(selectedYear.value);
+          console.log('Sections and subjects fetched');
+          
+          // Fetch actual dashboard data
+          await fetchDashboardData();
+          console.log('Initial data fetch completed');
+        } catch (error) {
+          console.error('Error during initialization:', error);
+        }
+      } else {
+        console.error('No user ID or token found');
+      }
     })
 
     return {
@@ -517,7 +914,13 @@ export default {
       formatDate,
       getFilterDisplay,
       handleYearChange,
-      applyFilters
+      applyFilters,
+      assessmentTypeChart,
+      performanceTrendChart,
+      assessmentTypePerformanceChart,
+      selectedStartDate,
+      selectedEndDate,
+      today,
     }
   }
 }
@@ -532,51 +935,42 @@ export default {
 
 .dashboard-title {
   font-size: 2rem;
-  font-weight: 600;
-  color: #333;
+  font-weight: 700;
+  color: #2c3e50;
   margin: 0;
-}
-
-.filter-controls {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.form-label {
-  font-weight: 500;
-  color: #495057;
-  margin-bottom: 0.5rem;
-}
-
-.form-select {
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  padding: 0.5rem;
-  font-size: 0.9rem;
-  color: #495057;
+  letter-spacing: -0.5px;
 }
 
 .dashboard-card {
   background: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
   height: 100%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .icon-container {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
   background-color: #003366;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.dashboard-card:hover .icon-container {
+  transform: scale(1.05);
 }
 
 .icon-container i {
@@ -590,43 +984,46 @@ export default {
 
 .stat-title {
   font-size: 0.875rem;
-  color: #6c757d;
+  color: #64748b;
   margin: 0 0 0.5rem 0;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .stat-value {
   font-size: 1.75rem;
-  font-weight: 600;
-  color: #212529;
-  line-height: 1;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
 }
 
 .no-data {
-  color: #6c757d;
+  color: #94a3b8;
   font-style: italic;
   font-size: 0.875rem;
-}
-
-.chart-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  margin-top: 1.5rem;
-  padding: 1.5rem;
 }
 
 .chart-container {
   position: relative;
   height: 300px;
   width: 100%;
+  margin-bottom: 1rem;
+}
+
+.chart-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  height: 100%;
+  padding: 1.5rem;
 }
 
 .card-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #212529;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1e293b;
   margin-bottom: 1.5rem;
+  letter-spacing: -0.3px;
 }
 
 .no-data-message {
@@ -634,9 +1031,112 @@ export default {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: #6c757d;
+  color: #94a3b8;
   font-style: italic;
   text-align: center;
+  width: 100%;
+    padding: 1rem;
+}
+
+.btn-filter {
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9rem;
+  color: #1e293b;
+  min-width: 220px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-filter:hover {
+  background-color: #f8fafc;
+  border-color: #003366;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.filter-menu {
+  width: 320px;
+  padding: 1.25rem;
+  border: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+}
+
+.dropdown-header {
+  color: #003366;
+  font-weight: 700;
+  padding: 0;
+  margin-bottom: 1.25rem;
+  font-size: 1rem;
+}
+
+.form-label {
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.form-select, .form-control {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.625rem;
+  font-size: 0.9rem;
+  color: #1e293b;
+  background-color: #fff;
+  transition: all 0.2s ease;
+}
+
+.form-select:hover, .form-control:hover {
+  border-color: #003366;
+}
+
+.form-select:focus, .form-control:focus {
+  border-color: #003366;
+  box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.1);
+}
+
+.form-select:disabled {
+  background-color: #f1f5f9;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.dropdown-divider {
+  margin: 1.25rem 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.table {
+  margin-bottom: 0;
+}
+
+.table th {
+  font-weight: 600;
+  color: #475569;
+  border-bottom-width: 1px;
+  padding: 1rem;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.table td {
+  padding: 1rem;
+  color: #1e293b;
+  vertical-align: middle;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
 }
 
 @media (max-width: 768px) {
@@ -647,47 +1147,15 @@ export default {
   .dashboard-card {
     margin-bottom: 1rem;
   }
-}
 
-.btn-filter {
-  background-color: white;
-  border: 1px solid #dee2e6;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-  color: #495057;
-  min-width: 200px;
-  text-align: left;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+  .filter-menu {
+    width: 100%;
+    max-width: 320px;
+  }
 
-.btn-filter:hover {
-  background-color: #f8f9fa;
-  border-color: #003366;
-}
-
-.dropdown-menu {
-  width: 300px;
-  padding: 1rem;
-  border: none;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-}
-
-.dropdown-header {
-  color: #003366;
-  font-weight: 600;
-  padding: 0;
-  margin-bottom: 1rem;
-}
-
-.dropdown-divider {
-  margin: 1rem 0;
-}
-
-.form-select:disabled {
-  background-color: #e9ecef;
-  cursor: not-allowed;
+  .btn-filter {
+    min-width: auto;
+    width: 100%;
+  }
 }
 </style> 

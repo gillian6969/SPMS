@@ -1,12 +1,6 @@
 <template>
   <div class="attendance">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h2>
-        Attendance
-        <template v-if="selectedYear && selectedSection && selectedSubject">
-          : {{ selectedYear }} {{ selectedSection }} - {{ selectedSubject }}
-        </template>
-      </h2>
       
       <!-- Date Navigation -->
       <div class="d-flex align-items-center gap-3">

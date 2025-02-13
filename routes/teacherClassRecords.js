@@ -3,6 +3,7 @@ const router = express.Router();
 const TeacherClassRecord = require('../models/TeacherClassRecord');
 const auth = require('../middleware/auth');
 const mongoose = require('mongoose');
+const Assessment = require('../models/Assessment');
 
 // Create a new class record
 router.post('/create', auth, async (req, res) => {
@@ -403,6 +404,53 @@ router.get('/sections-subjects/:teacherId', auth, async (req, res) => {
       message: 'Server error', 
       error: error.message 
     });
+  }
+});
+
+// Get student performance
+router.get('/student/:studentId/performance', auth, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const studentId = req.params.studentId;
+
+    // Create date filter using the date field
+    let dateFilter = {};
+    if (startDate && endDate) {
+      const phStartDate = new Date(startDate);
+      const phEndDate = new Date(endDate);
+      
+      // Adjust for Philippine timezone
+      phStartDate.setHours(phStartDate.getHours() + 8);
+      phEndDate.setHours(phEndDate.getHours() + 8);
+      
+      dateFilter.date = {
+        $gte: phStartDate,
+        $lte: phEndDate
+      };
+    }
+
+    // Get all assessments for this student within the date range
+    const assessments = await Assessment.find({
+      ...dateFilter,
+      'scores.studentId': studentId
+    }).sort({ date: -1 }); // Sort by date field
+
+    const response = {
+      assessments: assessments.map(assessment => ({
+        id: assessment._id,
+        type: assessment.type,
+        number: assessment.number,
+        maxScore: assessment.maxScore,
+        date: assessment.date,
+        subject: assessment.subject,
+        score: assessment.scores.find(s => s.studentId.toString() === studentId)?.score || 0
+      }))
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching student performance:', error);
+    res.status(500).json({ message: 'Failed to fetch student performance' });
   }
 });
 

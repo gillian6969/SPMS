@@ -9,6 +9,22 @@
           <i class="fas fa-plus"></i> Add Assessment
         </button>
       </div>
+      <!-- Add date navigation controls -->
+      <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-outline-primary" @click="navigateDate(-1)">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <div class="date-display">
+          {{ formatDate(currentDate) }}
+        </div>
+        <button 
+          class="btn btn-outline-primary" 
+          @click="navigateDate(1)"
+          :disabled="isNextDayDisabled"
+        >
+          <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
     </div>
 
     <!-- Records Table -->
@@ -94,453 +110,465 @@
         </div>
 
         <div class="table-responsive">
-          <table class="table table-hover">
-            <thead>
-              <tr>
-                <th>Student Number</th>
-                <th>Last Name</th>
-                <th>First Name</th>
-                <th v-for="assessment in assessments" :key="assessment.id">
-                  <div class="assessment-header" @click="editAssessment(assessment)">
-                      {{ assessment.type }} {{ assessment.number }}
-                      <br>
-                      <small>({{ assessment.maxScore }} pts)</small>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-if="sortedStudents.length > 0">
-                <tr 
-                  v-for="student in sortedStudents" 
-                  :key="student.studentNumber"
-                  @click="viewStudentDetails(student)"
-                  class="clickable-row"
-                >
-                  <td>{{ student.studentNumber }}</td>
-                  <td>{{ student.lastName }}</td>
-                  <td>{{ student.firstName }}</td>
-                  <td v-for="assessment in assessments" :key="assessment.id">
-                    <input 
-                      type="number" 
-                      class="form-control form-control-sm score-input"
-                      v-model="student.scores[assessment.id]"
-                      :max="assessment.maxScore"
-                      min="0"
-                      @change="updateScore(student, assessment)"
-                      @click.stop
-                    >
+          <div class="table-slide-container" :class="slideDirection">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Student Number</th>
+                  <th>Last Name</th>
+                  <th>First Name</th>
+                  <th v-for="assessment in filteredAssessmentsByDate" :key="assessment.id">
+                    <div class="assessment-header" @click="editAssessment(assessment)">
+                        {{ assessment.type }} {{ assessment.number }}
+                        <br>
+                        <small>({{ assessment.maxScore }} pts)</small>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-if="sortedStudents.length > 0">
+                  <tr 
+                    v-for="student in sortedStudents" 
+                    :key="student.studentNumber"
+                    @click="viewStudentDetails(student)"
+                    class="clickable-row"
+                  >
+                    <td>{{ student.studentNumber }}</td>
+                    <td>{{ student.lastName }}</td>
+                    <td>{{ student.firstName }}</td>
+                    <td v-for="assessment in filteredAssessmentsByDate" :key="assessment.id">
+                      <input 
+                        type="number" 
+                        class="form-control form-control-sm score-input"
+                        v-model="student.scores[assessment.id]"
+                        :max="assessment.maxScore"
+                        min="0"
+                        @change="updateScore(student, assessment)"
+                        @click.stop
+                      >
+                    </td>
+                  </tr>
+                </template>
+                <tr v-else>
+                  <td colspan="5" class="text-center py-4">
+                    <div class="empty-state-message">
+                      <i class="fas fa-users text-muted mb-2"></i>
+                      <p class="mb-0">No students found</p>
+                      <p class="text-muted small" v-if="hasActiveFilters">
+                        Try adjusting your filters
+                      </p>
+                    </div>
                   </td>
                 </tr>
-              </template>
-              <tr v-else>
-                <td colspan="5" class="text-center py-4">
-                  <div class="empty-state-message">
-                    <i class="fas fa-users text-muted mb-2"></i>
-                    <p class="mb-0">No students found</p>
-                    <p class="text-muted small" v-if="hasActiveFilters">
-                      Try adjusting your filters
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Add Assessment Modal -->
-    <div v-if="showAddAssessmentModal" class="modal fade show" style="display: block">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Add Assessment</h5>
-            <button type="button" class="btn-close" @click="showAddAssessmentModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="handleAddAssessment">
-              <!-- Assessment Type -->
-              <div class="mb-3">
-                <label class="form-label">Type</label>
-                <select class="form-select" v-model="newAssessment.type" required>
-                  <option value="">Select Type</option>
-                  <option value="Quiz">Quiz</option>
-                  <option value="Activity">Activity</option>
-                  <option value="Performance Task">Performance Task</option>
-                </select>
-              </div>
+    <div v-if="showAddAssessmentModal" class="modal-overlay">
+      <div class="modal-wrapper">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Add Assessment</h5>
+              <button type="button" class="btn-close" @click="showAddAssessmentModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="handleAddAssessment">
+                <!-- Assessment Type -->
+                <div class="mb-3">
+                  <label class="form-label">Type</label>
+                  <select class="form-select" v-model="newAssessment.type" required>
+                    <option value="">Select Type</option>
+                    <option value="Quiz">Quiz</option>
+                    <option value="Activity">Activity</option>
+                    <option value="Performance Task">Performance Task</option>
+                  </select>
+                </div>
 
-              <!-- Assessment Number -->
-              <div class="mb-3">
-                <label class="form-label">Number</label>
-                <input 
-                  type="number" 
-                  class="form-control" 
-                  v-model="newAssessment.number"
-                  min="1"
-                  required
-                >
-              </div>
+                <!-- Assessment Number -->
+                <div class="mb-3">
+                  <label class="form-label">Number</label>
+                  <input 
+                    type="number" 
+                    class="form-control" 
+                    v-model="newAssessment.number"
+                    min="1"
+                    required
+                  >
+                </div>
 
-              <!-- Max Score -->
-              <div class="mb-3">
-                <label class="form-label">Maximum Score</label>
-                <input 
-                  type="number" 
-                  class="form-control" 
-                  v-model="newAssessment.maxScore"
-                  min="1"
-                  required
-                >
-              </div>
+                <!-- Max Score -->
+                <div class="mb-3">
+                  <label class="form-label">Maximum Score</label>
+                  <input 
+                    type="number" 
+                    class="form-control" 
+                    v-model="newAssessment.maxScore"
+                    min="1"
+                    required
+                  >
+                </div>
 
-              <div class="text-end">
-                <button type="button" class="btn btn-secondary me-2" @click="showAddAssessmentModal = false">
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary">
-                  Add Assessment
-                </button>
-              </div>
-            </form>
+                <div class="text-end">
+                  <button type="button" class="btn btn-secondary me-2" @click="showAddAssessmentModal = false">
+                    Cancel
+                  </button>
+                  <button type="submit" class="btn btn-primary">
+                    Add Assessment
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </div>
-      <div class="modal-backdrop fade show"></div>
+      <div class="modal-backdrop"></div>
     </div>
 
     <!-- Student Details Modal -->
-    <div v-if="selectedStudent" class="modal-wrapper">
-      <div class="modal">
-      <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h4 class="modal-title mb-0">
-              <i class="fas fa-user-graduate me-2"></i>
-              Student Details
-            </h4>
-            <button type="button" class="btn-close btn-close-white" @click="selectedStudent = null"></button>
-          </div>
-          <div class="modal-body">
-            <!-- Student Information Card -->
-            <div class="student-info-card mb-4">
-              <div class="student-info-header">
-                <i class="fas fa-info-circle me-2"></i>
-                Student Information
-              </div>
-              <div class="student-info-content">
-                <div class="info-grid">
-                  <div class="info-item">
-                    <label>Student Number</label>
-                    <span>{{ selectedStudent?.studentNumber }}</span>
-                  </div>
-                  <div class="info-item">
-                    <label>Name</label>
-                    <span>{{ selectedStudent?.firstName }} {{ selectedStudent?.lastName }}</span>
-                  </div>
-                  <div class="info-item">
-                    <label>Year & Section</label>
-                    <span>{{ selectedYear }} - {{ selectedSection }}</span>
-                  </div>
-                  <div class="info-item">
-                    <label>Subject</label>
-                    <span>{{ selectedSubject }}</span>
-                  </div>
-                </div>
-              </div>
+    <div v-if="selectedStudent" class="modal-overlay">
+      <div class="modal-wrapper" style="max-width: 1200px;">
+        <div class="modal-dialog modal-xl">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h4 class="modal-title mb-0">
+                <i class="fas fa-user-graduate me-2"></i>
+                Student Details
+              </h4>
+              <button type="button" class="btn-close" @click="selectedStudent = null"></button>
             </div>
-
-            <!-- Performance Charts -->
-            <div class="performance-card mb-4">
-              <div class="performance-header">
-                <i class="fas fa-chart-line me-2"></i>
-                Performance Overview
-                  <div class="ms-auto d-flex gap-2">
-                    <div class="date-filter">
-                      <button class="btn btn-sm btn-outline-light" @click="showChartDateFilter = true">
-                        <i class="fas fa-calendar me-1"></i>
-                        {{ chartDateRange.start ? formatDate(chartDateRange.start) : 'Start' }} - 
-                        {{ chartDateRange.end ? formatDate(chartDateRange.end) : 'End' }}
-                      </button>
+            <div class="modal-body">
+              <!-- Student Information Card -->
+              <div class="student-info-card mb-4">
+                <div class="student-info-header">
+                  <i class="fas fa-info-circle me-2"></i>
+                  Student Information
+                </div>
+                <div class="student-info-content">
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <label>Student Number</label>
+                      <span>{{ selectedStudent?.studentNumber }}</span>
                     </div>
-                  </div>
-              </div>
-              <div class="performance-content">
-                <div class="row">
-                  <div class="col-md-4">
-                    <div class="chart-container">
-                      <h6>Quiz Scores</h6>
-                      <canvas ref="quizChart"></canvas>
+                    <div class="info-item">
+                      <label>Name</label>
+                      <span>{{ selectedStudent?.firstName }} {{ selectedStudent?.lastName }}</span>
                     </div>
-                  </div>
-                  <div class="col-md-4">
-                    <div class="chart-container">
-                      <h6>Activity Scores</h6>
-                      <canvas ref="activityChart"></canvas>
+                    <div class="info-item">
+                      <label>Year & Section</label>
+                      <span>{{ selectedYear }} - {{ selectedSection }}</span>
                     </div>
-                  </div>
-                  <div class="col-md-4">
-                    <div class="chart-container">
-                      <h6>Performance Task Scores</h6>
-                      <canvas ref="performanceChart"></canvas>
+                    <div class="info-item">
+                      <label>Subject</label>
+                      <span>{{ selectedSubject }}</span>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Score History -->
-            <div class="history-card">
-              <div class="history-header">
-                <i class="fas fa-history me-2"></i>
-                Score History
-                  <div class="ms-auto d-flex gap-2">
-                    <div class="assessment-filter">
-                      <select class="form-select form-select-sm" v-model="selectedAssessmentType">
-                        <option value="">All Types</option>
-                        <option value="Quiz">Quizzes</option>
-                        <option value="Activity">Activities</option>
-                        <option value="Performance Task">Performance Tasks</option>
-                      </select>
+              <!-- Performance Charts -->
+              <div class="performance-card mb-4">
+                <div class="performance-header">
+                  <i class="fas fa-chart-line me-2"></i>
+                  Performance Overview
+                    <div class="ms-auto d-flex gap-2">
+                      <div class="date-filter">
+                        <button class="btn btn-sm btn-outline-light" @click="openChartDateFilter">
+                          <i class="fas fa-calendar me-1"></i>
+                          {{ chartDateRange.start ? formatDate(chartDateRange.start) : 'Start' }} - 
+                          {{ chartDateRange.end ? formatDate(chartDateRange.end) : 'End' }}
+                        </button>
+                      </div>
                     </div>
-                    <div class="date-filter">
-                      <button class="btn btn-sm btn-outline-light" @click="showHistoryDateFilter = true">
-                        <i class="fas fa-calendar me-1"></i>
-                        {{ historyDateRange.start ? formatDate(historyDateRange.start) : 'Start' }} - 
-                        {{ historyDateRange.end ? formatDate(historyDateRange.end) : 'End' }}
-                      </button>
+                </div>
+                <div class="performance-content">
+                  <div class="row">
+                    <div class="col-md-4">
+                      <div class="chart-container">
+                        <h6>Quiz Scores</h6>
+                        <canvas ref="quizChart"></canvas>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="chart-container">
+                        <h6>Activity Scores</h6>
+                        <canvas ref="activityChart"></canvas>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="chart-container">
+                        <h6>Performance Task Scores</h6>
+                        <canvas ref="performanceChart"></canvas>
+                      </div>
                     </div>
                   </div>
+                </div>
               </div>
-              <div class="history-content">
-                <div class="table-responsive">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Assessment</th>
-                        <th>Score</th>
-                        <th>Max Score</th>
-                        <th>Percentage</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="assessment in filteredAssessments" :key="assessment.id">
-                        <td>{{ formatDate(assessment.date) }}</td>
-                        <td>
-                          <span :class="'badge ' + getAssessmentBadgeClass(assessment.type)">
-                            {{ assessment.type }}
-                          </span>
-                        </td>
-                        <td>{{ assessment.number }}</td>
-                        <td>{{ assessment.scores[selectedStudent.studentNumber] || 0 }}</td>
-                        <td>{{ assessment.maxScore }}</td>
-                        <td>
-                          <span :class="getScoreClass((assessment.scores[selectedStudent.studentNumber] || 0) / assessment.maxScore * 100)">
-                            {{ ((assessment.scores[selectedStudent.studentNumber] || 0) / assessment.maxScore * 100).toFixed(1) }}%
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+
+              <!-- Score History -->
+              <div class="history-card">
+                <div class="history-header">
+                  <i class="fas fa-history me-2"></i>
+                  Score History
+                    <div class="ms-auto d-flex gap-2">
+                      <div class="assessment-filter">
+                        <select class="form-select form-select-sm" v-model="selectedAssessmentType">
+                          <option value="">All Types</option>
+                          <option value="Quiz">Quizzes</option>
+                          <option value="Activity">Activities</option>
+                          <option value="Performance Task">Performance Tasks</option>
+                        </select>
+                      </div>
+                      <div class="date-filter">
+                        <button class="btn btn-sm btn-outline-light" @click="openHistoryDateFilter">
+                          <i class="fas fa-calendar me-1"></i>
+                          {{ historyDateRange.start ? formatDate(historyDateRange.start) : 'Start' }} - 
+                          {{ historyDateRange.end ? formatDate(historyDateRange.end) : 'End' }}
+                        </button>
+                      </div>
+                    </div>
+                </div>
+                <div class="history-content">
+                  <div class="table-responsive">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Type</th>
+                          <th>Assessment</th>
+                          <th>Score</th>
+                          <th>Max Score</th>
+                          <th>Percentage</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                          <tr v-for="assessment in filteredAssessments" :key="assessment.id">
+                          <td>{{ formatDate(assessment.date) }}</td>
+                          <td>
+                            <span :class="'badge ' + getAssessmentBadgeClass(assessment.type)">
+                              {{ assessment.type }}
+                            </span>
+                          </td>
+                          <td>{{ assessment.number }}</td>
+                          <td>{{ assessment.scores[selectedStudent?.studentNumber] || 0 }}</td>
+                          <td>{{ assessment.maxScore }}</td>
+                          <td>
+                            <span :class="getScoreClass((assessment.scores[selectedStudent?.studentNumber] || 0) / assessment.maxScore * 100)">
+                              {{ ((assessment.scores[selectedStudent?.studentNumber] || 0) / assessment.maxScore * 100).toFixed(1) }}%
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
       </div>
       <div class="modal-backdrop" @click="selectedStudent = null"></div>
     </div>
 
     <!-- Chart Date Filter Modal -->
-    <div v-if="showChartDateFilter" class="modal-wrapper">
-      <div class="modal">
-        <div class="modal-dialog modal-sm">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Filter Chart Date Range</h5>
-              <button type="button" class="btn-close btn-close-white" @click="showChartDateFilter = false"></button>
-            </div>
-            <div class="modal-body">
-              <div class="mb-3">
-                <label class="form-label">Start Date</label>
-                <input type="date" class="form-control" v-model="chartDateRange.start">
+    <teleport to="body" v-if="showChartDateFilter">
+      <div class="modal-overlay">
+        <div class="modal-wrapper">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Filter Chart Date Range</h5>
+                <button type="button" class="btn-close" @click="showChartDateFilter = false"></button>
               </div>
-              <div class="mb-3">
-                <label class="form-label">End Date</label>
-                <input type="date" class="form-control" v-model="chartDateRange.end">
-              </div>
-              <div class="text-end">
-                <button class="btn btn-secondary me-2" @click="clearChartDateFilter">Clear</button>
-                <button class="btn btn-primary" @click="applyChartDateFilter">Apply</button>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label">Start Date</label>
+                  <input type="date" class="form-control" v-model="chartDateRange.start">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">End Date</label>
+                  <input type="date" class="form-control" v-model="chartDateRange.end">
+                </div>
+                <div class="text-end">
+                  <button class="btn btn-secondary me-2" @click="clearChartDateFilter">Clear</button>
+                  <button class="btn btn-primary" @click="applyChartDateFilter">Apply</button>
+                </div>
               </div>
             </div>
           </div>
         </div>
+        <div class="modal-backdrop" @click="showChartDateFilter = false"></div>
       </div>
-      <div class="modal-backdrop" @click="showChartDateFilter = false"></div>
-    </div>
+    </teleport>
 
     <!-- History Date Filter Modal -->
-    <div v-if="showHistoryDateFilter" class="modal-wrapper">
-      <div class="modal">
-        <div class="modal-dialog modal-sm">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Filter History Date Range</h5>
-              <button type="button" class="btn-close btn-close-white" @click="showHistoryDateFilter = false"></button>
-            </div>
-            <div class="modal-body">
-              <div class="mb-3">
-                <label class="form-label">Start Date</label>
-                <input type="date" class="form-control" v-model="historyDateRange.start">
+    <teleport to="body" v-if="showHistoryDateFilter">
+      <div class="modal-overlay">
+        <div class="modal-wrapper">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Filter History Date Range</h5>
+                <button type="button" class="btn-close" @click="showHistoryDateFilter = false"></button>
               </div>
-              <div class="mb-3">
-                <label class="form-label">End Date</label>
-                <input type="date" class="form-control" v-model="historyDateRange.end">
-              </div>
-              <div class="text-end">
-                <button class="btn btn-secondary me-2" @click="clearHistoryDateFilter">Clear</button>
-                <button class="btn btn-primary" @click="applyHistoryDateFilter">Apply</button>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label">Start Date</label>
+                  <input type="date" class="form-control" v-model="historyDateRange.start">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">End Date</label>
+                  <input type="date" class="form-control" v-model="historyDateRange.end">
+                </div>
+                <div class="text-end">
+                  <button class="btn btn-secondary me-2" @click="clearHistoryDateFilter">Clear</button>
+                  <button class="btn btn-primary" @click="applyHistoryDateFilter">Apply</button>
+                </div>
               </div>
             </div>
           </div>
         </div>
+        <div class="modal-backdrop" @click="showHistoryDateFilter = false"></div>
       </div>
-      <div class="modal-backdrop" @click="showHistoryDateFilter = false"></div>
-    </div>
+    </teleport>
 
     <!-- Add Student Record Modal -->
-    <div v-if="showAddStudentRecordModal" class="modal fade show" style="display: block">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Add Student Record</h5>
-            <button type="button" class="btn-close" @click="showAddStudentRecordModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="handleAddStudentRecord">
-              <!-- Year Selection -->
-              <div class="mb-3">
-                <label class="form-label">Year</label>
-                <select class="form-select" v-model="newStudentRecord.year" required>
-                  <option value="">Select Year</option>
-                  <option v-for="year in availableYears" :key="year" :value="year">
-                    {{ year }}
-                  </option>
-                </select>
-              </div>
+    <div v-if="showAddStudentRecordModal" class="modal-overlay">
+      <div class="modal-wrapper">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Add Student Record</h5>
+              <button type="button" class="btn-close" @click="showAddStudentRecordModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="handleAddStudentRecord">
+                <!-- Year Selection -->
+                <div class="mb-3">
+                  <label class="form-label">Year</label>
+                  <select class="form-select" v-model="newStudentRecord.year" required>
+                    <option value="">Select Year</option>
+                    <option v-for="year in availableYears" :key="year" :value="year">
+                      {{ year }}
+                    </option>
+                  </select>
+                </div>
 
-              <!-- Section Selection -->
-              <div class="mb-3">
-                <label class="form-label">Section</label>
-                <select class="form-select" v-model="newStudentRecord.section" required>
-                  <option value="">Select Section</option>
-                  <option v-for="section in availableSections" :key="section" :value="section">
-                    {{ section }}
-                  </option>
-                </select>
-              </div>
+                <!-- Section Selection -->
+                <div class="mb-3">
+                  <label class="form-label">Section</label>
+                  <select class="form-select" v-model="newStudentRecord.section" required>
+                    <option value="">Select Section</option>
+                    <option v-for="section in availableSections" :key="section" :value="section">
+                      {{ section }}
+                    </option>
+                  </select>
+                </div>
 
-              <!-- Subject Input -->
-              <div class="mb-3">
-                <label class="form-label">Subject</label>
-                <input 
-                  type="text" 
-                  class="form-control" 
-                  v-model="newStudentRecord.subject" 
-                  placeholder="Enter subject name"
-                  required
-                >
-              </div>
+                <!-- Subject Input -->
+                <div class="mb-3">
+                  <label class="form-label">Subject</label>
+                  <input 
+                    type="text" 
+                    class="form-control" 
+                    v-model="newStudentRecord.subject" 
+                    placeholder="Enter subject name"
+                    required
+                  >
+                </div>
 
-              <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-secondary" @click="showAddStudentRecordModal = false">
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary" :disabled="!canAddStudentRecord">
-                  Add Record
-                </button>
-              </div>
-            </form>
+                <div class="d-flex justify-content-end gap-2">
+                  <button type="button" class="btn btn-secondary" @click="showAddStudentRecordModal = false">
+                    Cancel
+                  </button>
+                  <button type="submit" class="btn btn-primary" :disabled="!canAddStudentRecord">
+                    Add Record
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </div>
-      <div class="modal-backdrop fade show"></div>
+      <div class="modal-backdrop"></div>
     </div>
 
     <!-- Edit Assessment Modal -->
-    <div v-if="showEditAssessmentModal" class="modal fade show" style="display: block">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Edit Assessment</h5>
-            <button type="button" class="btn-close" @click="showEditAssessmentModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="handleEditAssessment">
-              <!-- Assessment Type -->
-              <div class="mb-3">
-                <label class="form-label">Type</label>
-                <select class="form-select" v-model="editingAssessment.type" required>
-                  <option value="">Select Type</option>
-                  <option value="Quiz">Quiz</option>
-                  <option value="Activity">Activity</option>
-                  <option value="Performance Task">Performance Task</option>
-                </select>
-              </div>
-
-              <!-- Assessment Number -->
-              <div class="mb-3">
-                <label class="form-label">Number</label>
-                <input 
-                  type="number" 
-                  class="form-control" 
-                  v-model="editingAssessment.number"
-                  min="1"
-                  required
-                >
-              </div>
-
-              <!-- Max Score -->
-              <div class="mb-3">
-                <label class="form-label">Maximum Score</label>
-                <input 
-                  type="number" 
-                  class="form-control" 
-                  v-model="editingAssessment.maxScore"
-                  min="1"
-                  required
-                >
-              </div>
-
-              <div class="d-flex justify-content-between">
-                <button type="button" class="btn btn-danger" @click="handleDeleteAssessment">
-                  <i class="fas fa-trash me-1"></i> Delete Assessment
-                </button>
-                <div>
-                <button type="button" class="btn btn-secondary me-2" @click="showEditAssessmentModal = false">
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary">
-                  Save Changes
-                </button>
+    <div v-if="showEditAssessmentModal" class="modal-overlay">
+      <div class="modal-wrapper">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Edit Assessment</h5>
+              <button type="button" class="btn-close" @click="showEditAssessmentModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="handleEditAssessment">
+                <!-- Assessment Type -->
+                <div class="mb-3">
+                  <label class="form-label">Type</label>
+                  <select class="form-select" v-model="editingAssessment.type" required>
+                    <option value="">Select Type</option>
+                    <option value="Quiz">Quiz</option>
+                    <option value="Activity">Activity</option>
+                    <option value="Performance Task">Performance Task</option>
+                  </select>
                 </div>
-              </div>
-            </form>
+
+                <!-- Assessment Number -->
+                <div class="mb-3">
+                  <label class="form-label">Number</label>
+                  <input 
+                    type="number" 
+                    class="form-control" 
+                    v-model="editingAssessment.number"
+                    min="1"
+                    required
+                  >
+                </div>
+
+                <!-- Max Score -->
+                <div class="mb-3">
+                  <label class="form-label">Maximum Score</label>
+                  <input 
+                    type="number" 
+                    class="form-control" 
+                    v-model="editingAssessment.maxScore"
+                    min="1"
+                    required
+                  >
+                </div>
+
+                <div class="d-flex justify-content-between">
+                  <button type="button" class="btn btn-danger" @click="handleDeleteAssessment">
+                    <i class="fas fa-trash me-1"></i> Delete Assessment
+                  </button>
+                  <div>
+                    <button type="button" class="btn btn-secondary me-2" @click="showEditAssessmentModal = false">
+                      Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </div>
-      <div class="modal-backdrop fade show"></div>
+      <div class="modal-backdrop"></div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useStore } from 'vuex'
 import axios from 'axios'
 import Chart from 'chart.js/auto'
@@ -565,6 +593,7 @@ export default {
     const searchQuery = ref('')
     const students = ref([])
     const assessments = ref([])
+    const currentDate = ref(new Date())
     const showAddAssessmentModal = ref(false)
     const selectedStudent = ref(null)
     const quizChart = ref(null)
@@ -599,8 +628,8 @@ export default {
       maxScore: ''
     })
 
-    const availableYears = ref([])
-    const availableSections = ref([])
+    const availableYears = ref(['1st', '2nd', '3rd', '4th'])
+    const availableSections = ref(['South 1', 'South 2', 'South 3'])
     const teacherSubjects = ref([])
 
     const teachingYear = computed(() => {
@@ -774,95 +803,54 @@ export default {
     // Handle adding new assessment
     const handleAddAssessment = async () => {
       try {
-        const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id || user.value?._id
-
-        if (!teacherId) {
-          alert('Teacher ID is not available. Please try logging in again.')
-          store.dispatch('logout')
-          router.push('/login')
-          return
-        }
-
         if (!selectedSection.value || !selectedSubject.value) {
-          alert('Please select a section and subject before adding an assessment.')
-          return
+          alert('Please select a section and subject first');
+          return;
         }
 
-        // Validate assessment data
-        if (!newAssessment.value.type || !newAssessment.value.number || !newAssessment.value.maxScore) {
-          alert('Please fill in all assessment fields.')
-          return
+        const teacherId = store.state.auth.user?._id;
+        if (!teacherId) {
+          console.error('Teacher ID not available');
+          return;
         }
 
-        // Check for assessment limit per day
-        const today = new Date().toISOString().split('T')[0]
-        const todaysAssessments = assessments.value.filter(assessment => {
-          const assessmentDate = new Date(assessment.date).toISOString().split('T')[0]
-          return assessmentDate === today
-        })
-
-        if (todaysAssessments.length >= 5) {
-          alert('Maximum limit of 5 assessments per day has been reached.')
-          return
-        }
-
-        // First, create the assessment in the assessments collection
-        const assessmentData = {
-          ...newAssessment.value,
+        // Use the current table date for the assessment
+        const assessment = {
+          type: newAssessment.value.type,
+          number: parseInt(newAssessment.value.number),
+          maxScore: parseInt(newAssessment.value.maxScore),
           teacherId,
           section: selectedSection.value,
           subject: selectedSubject.value,
-          date: new Date().toISOString()
-        }
+          date: currentDate.value.toISOString()
+        };
 
-        console.log('Creating assessment with data:', assessmentData)
-
-        const assessmentResponse = await axios.post(
-          'http://localhost:8000/api/assessments', 
-          assessmentData,
+        const response = await axios.post(
+          'http://localhost:8000/api/assessments',
+          assessment,
           {
             headers: {
-              'Authorization': `Bearer ${token}`
+              'Authorization': `Bearer ${store.state.auth.token}`,
+              'Content-Type': 'application/json'
             }
           }
-        )
+        );
 
-        if (!assessmentResponse.data) {
-          throw new Error('Failed to create assessment')
-        }
-
-        console.log('Assessment created:', assessmentResponse.data)
-
-        // Add the new assessment to the local state
-        const newAssessmentWithId = {
-          ...assessmentResponse.data,
-          id: assessmentResponse.data._id
-        }
+        // Add the new assessment to the list
+        assessments.value.push(response.data);
         
-        // Update the assessments array
-        assessments.value = [...assessments.value, newAssessmentWithId]
-
-        // Initialize scores for all students for this assessment
-        students.value.forEach(student => {
-          if (!student.scores) {
-            student.scores = {}
-          }
-          student.scores[newAssessmentWithId.id] = null
-        })
-
-        // Close the modal and reset the form
-        showAddAssessmentModal.value = false
-        newAssessment.value = { type: '', number: '', maxScore: '' }
-
-        // Show success message
-        alert('Assessment added successfully!')
+        // Reset form and close modal
+        newAssessment.value = {
+          type: '',
+          number: '',
+          maxScore: ''
+        };
+        showAddAssessmentModal.value = false;
       } catch (error) {
-        console.error('Failed to add assessment:', error)
-        const errorMessage = error.response?.data?.message || error.message || 'Please try again.'
-        alert('Failed to add assessment: ' + errorMessage)
+        console.error('Failed to add assessment:', error);
+        alert('Failed to add assessment. ' + (error.response?.data?.message || 'Please try again.'));
       }
-    }
+    };
 
     // Fetch assessments for the current section and subject
     const fetchAssessments = async () => {
@@ -894,7 +882,7 @@ export default {
           }
           assessments.value.forEach(assessment => {
             if (!student.scores[assessment.id]) {
-              // Access scores directly from the object using studentNumber
+              // Only set score if it exists in the assessment scores
               student.scores[assessment.id] = assessment.scores?.[student.studentNumber] || null;
             }
           });
@@ -1029,7 +1017,7 @@ export default {
           }
         });
 
-        // Map the assessments to include scores
+        // Map the assessments to include scores and use date field
         const studentAssessments = assessmentsResponse.data.map(assessment => ({
           id: assessment._id,
           type: assessment.type,
@@ -1045,95 +1033,60 @@ export default {
           assessments: studentAssessments
         };
 
-        // Set default date range to today
-        const today = new Date().toISOString().split('T')[0];
+        // Set both chart and history date ranges to match the current table date
+        const currentTableDate = currentDate.value.toISOString().split('T')[0];
         chartDateRange.value = {
-          start: today,
-          end: today
+          start: currentTableDate,
+          end: currentTableDate
+        };
+        historyDateRange.value = {
+          start: currentTableDate,
+          end: currentTableDate
         };
 
-        // Filter assessments for today by default
-        const todaysAssessments = studentAssessments.filter(assessment => {
-          const assessmentDate = new Date(assessment.date).toISOString().split('T')[0];
-          return assessmentDate === today;
-        });
-
-        // Group today's assessments by type for charts
-        const assessmentsByType = {
-          Quiz: [],
-          Activity: [],
-          'Performance Task': []
-        };
-
-        todaysAssessments.forEach(assessment => {
-          const score = assessment.scores[student.studentNumber];
-          if (assessment.type in assessmentsByType) {
-            assessmentsByType[assessment.type].push({
-              number: assessment.number,
-              score: score || 0,
-              maxScore: assessment.maxScore,
-              date: assessment.date,
-              type: assessment.type
-            });
-          }
-        });
-
-        // Destroy existing charts
-        [quizChart, activityChart, performanceChart].forEach(chartRef => {
-          if (chartRef.value) {
-            const existingChart = Chart.getChart(chartRef.value);
-            if (existingChart) {
-              existingChart.destroy();
-            }
-          }
-        });
-
-        // Wait for the next tick to ensure the canvases are mounted
-        await nextTick();
-
-        // Create new charts with today's data
-        Object.entries(assessmentsByType).forEach(([type, data]) => {
-          if (data.length > 0) {
-            const chartRef = type === 'Quiz' ? quizChart :
-                            type === 'Activity' ? activityChart :
-                            performanceChart;
-
-            const sortedData = data.sort((a, b) => a.number - b.number);
-            
-            if (chartRef.value) {
-              createChart(chartRef, {
-                type,
-                labels: sortedData.map(a => `#${a.number}`),
-                scores: sortedData.map(a => (a.score / a.maxScore * 100))
-              });
-            }
-          }
-        });
-
+        // Apply the date filters immediately
+        applyChartDateFilter();
+        applyHistoryDateFilter();
       } catch (error) {
         console.error('Error fetching student details:', error);
         alert('Failed to load student details. Please try again.');
       }
     };
 
+    // Add watch for currentDate to update student details when date changes
+    watch(currentDate, async () => {
+      if (selectedStudent.value) {
+        await viewStudentDetails(selectedStudent.value);
+      }
+    });
+
     // Format date
-    const formatDate = (date) => {
-      return moment(date).format('MMM D, YYYY')
-    }
+    const formatDate = (dateString) => {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      // Adjust for Philippine timezone (UTC+8)
+      date.setHours(date.getHours() + 8);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Manila'
+      });
+    };
 
     // Function to update teacher subjects
     const updateTeacherSubjects = async () => {
       try {
         const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id || user.value?._id
+        const teacherId = store.state.auth.user?._id
 
         if (!teacherId || !selectedYear.value || !selectedSection.value) {
           teacherSubjects.value = []
           return
         }
 
-        const response = await axios.get('http://localhost:8000/api/teacher-class-records', {
-          params: { 
+        const response = await axios.get('http://localhost:8000/api/teacher-class-records/available-subjects', {
+          params: {
             teacherId,
             year: selectedYear.value,
             section: selectedSection.value
@@ -1141,13 +1094,13 @@ export default {
           headers: { 'Authorization': `Bearer ${token}` }
         })
 
-        // Extract unique subjects from teacher's records
-        const subjects = new Set(response.data.map(record => record.subject))
-        teacherSubjects.value = Array.from(subjects).sort()
+        if (response.data && response.data.subjects) {
+          teacherSubjects.value = response.data.subjects.sort()
 
-        // If no subject is selected but we have subjects available, select the first one
-        if (!selectedSubject.value && teacherSubjects.value.length > 0) {
-          selectedSubject.value = teacherSubjects.value[0]
+          // If no subject is selected but we have subjects available, select the first one
+          if (!selectedSubject.value && teacherSubjects.value.length > 0) {
+            selectedSubject.value = teacherSubjects.value[0]
+          }
         }
       } catch (error) {
         console.error('Failed to fetch teacher subjects:', error)
@@ -1238,36 +1191,40 @@ export default {
 
     // Watch for changes in year selection
     watch(selectedYear, async (newYear) => {
-      selectedSection.value = ''
-      selectedSubject.value = ''
-      localStorage.setItem('selectedYear', newYear)
       if (newYear) {
+        selectedSection.value = ''
+        selectedSubject.value = ''
+        localStorage.setItem('selectedYear', newYear)
         await fetchAvailableSections()
       } else {
         availableSections.value = []
         teacherSubjects.value = []
+        localStorage.removeItem('selectedYear')
       }
     })
 
     // Watch for changes in section selection
     watch(selectedSection, async (newSection) => {
-      selectedSubject.value = ''
-      localStorage.setItem('selectedSection', newSection)
       if (newSection) {
+        selectedSubject.value = ''
+        localStorage.setItem('selectedSection', newSection)
         await updateTeacherSubjects()
       } else {
         teacherSubjects.value = []
+        localStorage.removeItem('selectedSection')
       }
     })
 
     // Watch for changes in subject selection
     watch(selectedSubject, async (newSubject) => {
-      localStorage.setItem('selectedSubject', newSubject)
       if (newSubject) {
+        localStorage.setItem('selectedSubject', newSubject)
         await Promise.all([
           fetchClassData(),
           fetchAssessments()
         ])
+      } else {
+        localStorage.removeItem('selectedSubject')
       }
     })
 
@@ -1565,7 +1522,7 @@ export default {
     const fetchAvailableYears = async () => {
       try {
         const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id || user.value?._id
+        const teacherId = store.state.auth.user?._id
 
         if (!teacherId) return
 
@@ -1575,8 +1532,8 @@ export default {
         })
 
         // Extract unique years from teacher's records
-        const years = new Set(response.data.map(record => record.year))
-        availableYears.value = Array.from(years).sort()
+        const years = [...new Set(response.data.map(record => record.year))]
+        availableYears.value = years.sort()
 
         // If no year is selected but we have years available, select the first one
         if (!selectedYear.value && availableYears.value.length > 0) {
@@ -1591,7 +1548,7 @@ export default {
     const fetchAvailableSections = async () => {
       try {
         const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id || user.value?._id
+        const teacherId = store.state.auth.user?._id
 
         if (!teacherId || !selectedYear.value) {
           availableSections.value = []
@@ -1607,8 +1564,8 @@ export default {
         })
 
         // Extract unique sections from teacher's records for the selected year
-        const sections = new Set(response.data.map(record => record.section))
-        availableSections.value = Array.from(sections).sort()
+        const sections = [...new Set(response.data.map(record => record.section))]
+        availableSections.value = sections.sort()
 
         // If no section is selected but we have sections available, select the first one
         if (!selectedSection.value && availableSections.value.length > 0) {
@@ -1624,44 +1581,39 @@ export default {
       if (!selectedStudent.value?.assessments) return [];
 
       return selectedStudent.value.assessments.filter(assessment => {
-        let passesTypeFilter = true;
+        const assessmentDate = new Date(assessment.date);
         let passesDateFilter = true;
 
-        // Apply assessment type filter
-        if (selectedAssessmentType.value) {
-          passesTypeFilter = assessment.type === selectedAssessmentType.value;
-        }
-
-        // Apply date filter
         if (historyDateRange.value.start && historyDateRange.value.end) {
-          const assessmentDate = new Date(assessment.date);
           const startDate = new Date(historyDateRange.value.start);
+          startDate.setUTCHours(0, 0, 0, 0);
+          startDate.setHours(startDate.getHours() + 8); // Adjust for Philippine timezone
+          
           const endDate = new Date(historyDateRange.value.end);
+          endDate.setUTCHours(23, 59, 59, 999);
+          endDate.setHours(endDate.getHours() + 8); // Adjust for Philippine timezone
+          
           passesDateFilter = assessmentDate >= startDate && assessmentDate <= endDate;
         }
 
-        return passesTypeFilter && passesDateFilter;
-      });
+        // Add type filter if selected
+        const passesTypeFilter = !selectedAssessmentType.value || assessment.type === selectedAssessmentType.value;
+
+        return passesDateFilter && passesTypeFilter;
+      }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date field
     });
 
     // Add filter handling functions
     const applyChartDateFilter = () => {
       if (chartDateRange.value.start && chartDateRange.value.end) {
-        // Destroy existing charts first
-        [quizChart, activityChart, performanceChart].forEach(chartRef => {
-          if (chartRef.value) {
-            const existingChart = Chart.getChart(chartRef.value);
-            if (existingChart) {
-              existingChart.destroy();
-            }
-          }
-        });
-
-        // Filter assessments by date range
         const filteredAssessments = selectedStudent.value.assessments.filter(assessment => {
           const assessmentDate = new Date(assessment.date);
           const startDate = new Date(chartDateRange.value.start);
+          startDate.setUTCHours(0, 0, 0, 0);
+          startDate.setHours(startDate.getHours() + 8);
           const endDate = new Date(chartDateRange.value.end);
+          endDate.setUTCHours(23, 59, 59, 999);
+          endDate.setHours(endDate.getHours() + 8);
           return assessmentDate >= startDate && assessmentDate <= endDate;
         });
 
@@ -1685,9 +1637,8 @@ export default {
           }
         });
 
-        // Wait for the next tick to ensure the canvases are ready
+        // Update charts with filtered data
         nextTick(() => {
-          // Update charts with filtered data
           Object.entries(assessmentsByType).forEach(([type, data]) => {
             if (data.length > 0) {
               const chartRef = type === 'Quiz' ? quizChart :
@@ -1729,6 +1680,10 @@ export default {
     };
 
     const applyHistoryDateFilter = () => {
+      if (historyDateRange.value.start && historyDateRange.value.end) {
+        // The filteredAssessments computed property will automatically update
+        // based on the new date range
+      }
       showHistoryDateFilter.value = false;
     };
 
@@ -1751,6 +1706,79 @@ export default {
       }
     }
 
+    // Add new computed property for filtered assessments by date
+    const filteredAssessmentsByDate = computed(() => {
+      return assessments.value.filter(assessment => {
+        const assessmentDate = new Date(assessment.date);
+        const currentDateStart = new Date(currentDate.value);
+        currentDateStart.setUTCHours(0, 0, 0, 0);
+        currentDateStart.setHours(currentDateStart.getHours() + 8); // Adjust for Philippine timezone
+        const currentDateEnd = new Date(currentDate.value);
+        currentDateEnd.setUTCHours(23, 59, 59, 999);
+        currentDateEnd.setHours(currentDateEnd.getHours() + 8); // Adjust for Philippine timezone
+        return assessmentDate >= currentDateStart && assessmentDate <= currentDateEnd;
+      });
+    });
+
+    // Add date navigation function
+    const navigateDate = (direction) => {
+      // Set slide direction
+      slideDirection.value = direction > 0 ? 'slide-left' : 'slide-right'
+      
+      // Update date
+      const newDate = new Date(currentDate.value)
+      newDate.setDate(newDate.getDate() + direction)
+      
+      // Only update if not navigating beyond today's date
+      const today = new Date()
+      today.setHours(23, 59, 59, 999)
+      if (newDate <= today || direction < 0) {
+        currentDate.value = newDate
+      }
+      
+      // Reset slide direction after animation
+      setTimeout(() => {
+        slideDirection.value = ''
+      }, 300)
+    }
+
+    // Add date formatting function
+    const formatDateForDisplay = (dateString) => {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      // Adjust for Philippine timezone
+      date.setHours(date.getHours() + 8);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Manila'
+      });
+    };
+
+    const openChartDateFilter = () => {
+      showChartDateFilter.value = true
+      // Close other modals if open
+      showHistoryDateFilter.value = false
+    }
+
+    const openHistoryDateFilter = () => {
+      showHistoryDateFilter.value = true
+      // Close other modals if open
+      showChartDateFilter.value = false
+    }
+
+    const slideDirection = ref('')
+
+    // Add computed property for next day button
+    const isNextDayDisabled = computed(() => {
+      const today = new Date()
+      today.setHours(23, 59, 59, 999)
+      const currentDateCopy = new Date(currentDate.value)
+      currentDateCopy.setHours(23, 59, 59, 999)
+      return currentDateCopy > today
+    })
+
     return {
       selectedYear,
       selectedSection,
@@ -1758,10 +1786,8 @@ export default {
       searchQuery,
       students,
       assessments,
-      filteredStudents,
-      teacherSubjects,
-      availableYears,
-      availableSections,
+      filteredAssessmentsByDate,
+      currentDate,
       showAddAssessmentModal,
       newAssessment,
       selectedStudent,
@@ -1772,6 +1798,8 @@ export default {
       updateScore,
       viewStudentDetails,
       formatDate,
+      formatDateForDisplay,
+      navigateDate,
       user,
       showAddStudentRecordModal,
       newStudentRecord,
@@ -1805,7 +1833,14 @@ export default {
       clearChartDateFilter,
       applyHistoryDateFilter,
       clearHistoryDateFilter,
-      handleLogout
+      handleLogout,
+      availableYears,
+      availableSections,
+      teacherSubjects,
+      openChartDateFilter,
+      openHistoryDateFilter,
+      slideDirection,
+      isNextDayDisabled
     }
   }
 }
@@ -1817,6 +1852,29 @@ export default {
   padding: 1.5rem 2rem;
   background: #f8f9fa;
   min-height: calc(100vh - 70px);
+}
+
+/* Add styles for date navigation */
+.date-display {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #495057;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  min-width: 300px;
+  text-align: center;
+}
+
+.btn-outline-primary {
+  padding: 0.5rem 1rem;
+  transition: all 0.2s ease;
+}
+
+.btn-outline-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .card {
@@ -2507,5 +2565,309 @@ input[type="date"].form-control:focus {
   border-radius: 15px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
   z-index: 10001;
+}
+
+/* Updated Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+}
+
+.modal-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  margin: 1.75rem;
+  z-index: 1052;
+}
+
+.modal-dialog {
+  position: relative;
+  width: 100%;
+  pointer-events: auto;
+}
+
+.modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: #fff;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1051;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: #203464;
+  color: #fff;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+}
+
+.modal-body {
+  padding: 1.5rem;
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+}
+
+.btn-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.5rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-close:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-close::before {
+  content: "×";
+  position: absolute;
+  font-size: 24px;
+  line-height: 1;
+  color: white;
+}
+
+/* Form Styles */
+.form-label {
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.form-control,
+.form-select {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: #203464;
+  box-shadow: 0 0 0 0.2rem rgba(32, 52, 100, 0.25);
+}
+
+/* Button Styles */
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: #203464;
+  border-color: #203464;
+}
+
+.btn-primary:hover {
+  background-color: #162544;
+  border-color: #162544;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  border-color: #6c757d;
+}
+
+.btn-secondary:hover {
+  background-color: #5a6268;
+  border-color: #545b62;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  border-color: #dc3545;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+  border-color: #bd2130;
+}
+
+/* Base z-index hierarchy */
+:root {
+  --z-nav: 1000;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-modal-dialog: 1060;
+  --z-datepicker: 9999;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-datepicker);
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: var(--z-modal-backdrop);
+}
+
+.modal-dialog {
+  position: relative;
+  width: 100%;
+  pointer-events: auto;
+  z-index: var(--z-modal-dialog);
+}
+
+/* Date picker specific styles */
+.modal .date-filter {
+  position: relative;
+}
+
+.modal .date-filter .modal-dialog {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: 0.5rem 0;
+  z-index: var(--z-datepicker);
+}
+
+/* Date picker styles */
+.date-input-container {
+  position: relative;
+  display: inline-block;
+}
+
+.date-picker-dropdown {
+  position: fixed;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  min-width: 250px;
+  z-index: var(--z-datepicker);
+}
+
+.date-filter {
+  position: relative;
+}
+
+.date-filter .form-control {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 150px;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.date-filter .form-control:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.date-filter span {
+  padding: 0 0.5rem;
+  color: white;
+}
+
+/* Ensure proper stacking context */
+.history-card {
+  position: relative;
+  overflow: visible !important;
+}
+
+.history-header {
+  position: relative;
+  overflow: visible;
+  z-index: 1;
+}
+
+/* Add these new styles at the end of your existing styles */
+.table-slide-container {
+  position: relative;
+  transition: transform 0.3s ease-in-out;
+}
+
+.table-slide-container.slide-left {
+  animation: slideLeft 0.3s ease-in-out;
+}
+
+.table-slide-container.slide-right {
+  animation: slideRight 0.3s ease-in-out;
+}
+
+@keyframes slideLeft {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideRight {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.table-responsive {
+  overflow: hidden;
+}
+
+/* Update button disabled state */
+.btn-outline-primary:disabled {
+  background-color: #e9ecef;
+  border-color: #dee2e6;
+  color: #6c757d;
+  cursor: not-allowed;
 }
 </style> 

@@ -52,19 +52,14 @@
                   <label class="form-label">Year</label>
                   <select class="form-select form-select-sm" v-model="selectedYear" @change="applyFilters">
                     <option value="">All Years</option>
-                    <option value="1st">1st Year</option>
-                    <option value="2nd">2nd Year</option>
-                    <option value="3rd">3rd Year</option>
-                    <option value="4th">4th Year</option>
+                    <option v-for="year in availableYears" :value="year">{{ year }}</option>
                   </select>
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Section</label>
                   <select class="form-select form-select-sm" v-model="selectedSection" @change="applyFilters">
                     <option value="">All Sections</option>
-                    <option value="South 1">South 1</option>
-                    <option value="South 2">South 2</option>
-                    <option value="South 3">South 3</option>
+                    <option v-for="section in availableSections" :value="section">{{ section }}</option>
                   </select>
                 </div>
               </div>
@@ -152,10 +147,7 @@
                 <label class="form-label">Year</label>
                 <select class="form-select" v-model="uploadYear" required>
                   <option value="">Select Year</option>
-                  <option value="1st">1st Year</option>
-                  <option value="2nd">2nd Year</option>
-                  <option value="3rd">3rd Year</option>
-                  <option value="4th">4th Year</option>
+                  <option v-for="year in availableYears" :value="year">{{ year }}</option>
                 </select>
               </div>
 
@@ -164,9 +156,7 @@
                 <label class="form-label">Section</label>
                 <select class="form-select" v-model="uploadSection" required>
                   <option value="">Select Section</option>
-                  <option value="South 1">South 1</option>
-                  <option value="South 2">South 2</option>
-                  <option value="South 3">South 3</option>
+                  <option v-for="section in availableSections" :value="section">{{ section }}</option>
                 </select>
               </div>
 
@@ -200,7 +190,8 @@
     </div>
 
     <!-- Student Details Modal -->
-    <div v-if="selectedStudent" class="modal fade show" style="display: block">
+    <div v-if="selectedStudent" class="modal-wrapper">
+      <div class="modal-backdrop"></div>
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header bg-primary text-white">
@@ -284,6 +275,70 @@
                   <div class="history-header">
                     <i class="fas fa-history me-2"></i>
                     Assessment History
+                    <div class="ms-auto d-flex gap-2">
+                      <!-- Date Filter Controls -->
+                      <div class="date-filter">
+                        <div class="d-flex align-items-center gap-2">
+                          <!-- Start Date -->
+                          <div class="date-input-container">
+                            <input 
+                              type="text" 
+                              class="form-control form-control-sm"
+                              :value="formatDateForDisplay(historyStartDate)"
+                              @click="showStartDatePicker = true"
+                              readonly
+                              placeholder="Start Date"
+                            >
+                            <div v-if="showStartDatePicker" class="date-picker-dropdown">
+                              <div class="date-picker-header">
+                                <button @click="showStartDatePicker = false" class="close-btn">
+                                  <i class="fas fa-times"></i>
+                                </button>
+                              </div>
+                              <input 
+                                type="date" 
+                                class="date-picker-input"
+                                v-model="historyStartDate"
+                                :max="historyEndDate"
+                                @change="showStartDatePicker = false"
+                              >
+                            </div>
+                          </div>
+
+                          <span class="text-white">to</span>
+
+                          <!-- End Date -->
+                          <div class="date-input-container">
+                            <input 
+                              type="text" 
+                              class="form-control form-control-sm"
+                              :value="formatDateForDisplay(historyEndDate)"
+                              @click="showEndDatePicker = true"
+                              readonly
+                              placeholder="End Date"
+                            >
+                            <div v-if="showEndDatePicker" class="date-picker-dropdown">
+                              <div class="date-picker-header">
+                                <button @click="showEndDatePicker = false" class="close-btn">
+                                  <i class="fas fa-times"></i>
+                                </button>
+                              </div>
+                              <input 
+                                type="date" 
+                                class="date-picker-input"
+                                v-model="historyEndDate"
+                                :min="historyStartDate"
+                                @change="showEndDatePicker = false"
+                              >
+                            </div>
+                          </div>
+
+                          <button class="btn btn-sm btn-outline-light" @click="clearHistoryDateFilter">
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div class="history-content">
                     <div class="table-responsive">
@@ -299,7 +354,7 @@
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="assessment in selectedStudent.assessments" :key="assessment.id">
+                          <tr v-for="assessment in filteredAssessments" :key="assessment.id">
                             <td>{{ formatDate(assessment.date) }}</td>
                             <td>{{ assessment.subject }}</td>
                             <td>
@@ -315,6 +370,11 @@
                               </span>
                             </td>
                           </tr>
+                          <tr v-if="filteredAssessments.length === 0">
+                            <td colspan="6" class="text-center py-3">
+                              <p class="text-muted mb-0">No assessments found for the selected date range</p>
+                            </td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>
@@ -325,7 +385,6 @@
           </div>
         </div>
       </div>
-      <div class="modal-backdrop fade show"></div>
     </div>
 
     <!-- Edit Student Modal -->
@@ -374,18 +433,13 @@
               <div class="mb-3">
                 <label class="form-label">Year</label>
                 <select class="form-select" v-model="editingStudent.year">
-                  <option value="1st">1st Year</option>
-                  <option value="2nd">2nd Year</option>
-                  <option value="3rd">3rd Year</option>
-                  <option value="4th">4th Year</option>
+                  <option v-for="year in availableYears" :value="year">{{ year }}</option>
                 </select>
               </div>
               <div class="mb-3">
                 <label class="form-label">Section</label>
                 <select class="form-select" v-model="editingStudent.section">
-                  <option value="South 1">South 1</option>
-                  <option value="South 2">South 2</option>
-                  <option value="South 3">South 3</option>
+                  <option v-for="section in availableSections" :value="section">{{ section }}</option>
                 </select>
               </div>
               <div class="d-flex justify-content-end gap-2">
@@ -441,7 +495,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useStore } from 'vuex'
 import axios from 'axios'
 import Chart from 'chart.js/auto'
@@ -476,6 +530,18 @@ export default {
     const isEditing = ref(false)
     const editingStudent = ref(null)
     const showSearch = ref(false)
+
+    // Available years and sections
+    const availableYears = ref(['1st', '2nd', '3rd', '4th'])
+    const availableSections = ref(['South 1', 'South 2', 'South 3'])
+
+    // Add date filter refs
+    const historyStartDate = ref('');
+    const historyEndDate = ref('');
+
+    // Add date picker visibility controls
+    const showStartDatePicker = ref(false);
+    const showEndDatePicker = ref(false);
 
     // Update the fetchStudents function to include token in request
     const fetchStudents = async () => {
@@ -517,11 +583,9 @@ export default {
     });
 
     // Watch for auth state changes
-    watch(() => store.getters.isLoggedIn, async (isLoggedIn) => {
-      if (isLoggedIn) {
-        await fetchStudents();
-      } else {
-        students.value = [];
+    watch(() => store.state.auth.token, (newToken) => {
+      if (newToken) {
+        fetchStudents();
       }
     });
 
@@ -566,40 +630,70 @@ export default {
       }
     };
 
-    // View student details
+    // Update viewStudent function to use createdAt
     const viewStudent = async (student) => {
       try {
-        selectedStudent.value = student
+        selectedStudent.value = student;
         
-        if (performanceChart.value) {
-          const existingChart = Chart.getChart(performanceChart.value)
+        // Clear existing charts
+        if (subjectChart.value) {
+          const existingChart = Chart.getChart(subjectChart.value);
           if (existingChart) {
-            existingChart.destroy()
+            existingChart.destroy();
+          }
+        }
+        if (attendanceChart.value) {
+          const existingChart = Chart.getChart(attendanceChart.value);
+          if (existingChart) {
+            existingChart.destroy();
           }
         }
 
-        const token = store.state.auth.token
-        // Get the student's performance data from teacher class records
+        const token = store.state.auth.token;
+        // Adjust dates for Philippine timezone when sending to API
+        let apiStartDate = historyStartDate.value ? new Date(historyStartDate.value) : undefined;
+        let apiEndDate = historyEndDate.value ? new Date(historyEndDate.value) : undefined;
+        
+        if (apiStartDate) {
+          apiStartDate.setUTCHours(0, 0, 0, 0);
+          apiStartDate.setHours(apiStartDate.getHours() + 8); // Adjust for Philippine timezone
+        }
+        if (apiEndDate) {
+          apiEndDate.setUTCHours(23, 59, 59, 999);
+          apiEndDate.setHours(apiEndDate.getHours() + 8); // Adjust for Philippine timezone
+        }
+
         const response = await axios.get(`http://localhost:8000/api/teacher-class-records/student/${student._id}/performance`, {
           headers: {
             'Authorization': `Bearer ${token}`
+          },
+          params: {
+            startDate: apiStartDate?.toISOString() || undefined,
+            endDate: apiEndDate?.toISOString() || undefined
           }
-        })
+        });
         
-        const performanceData = response.data
+        const performanceData = response.data;
 
-        // Create performance chart with aggregated data
-        new Chart(performanceChart.value, {
+        // Sort assessments by createdAt
+        if (performanceData.assessments) {
+          performanceData.assessments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          selectedStudent.value.assessments = performanceData.assessments;
+        }
+
+        // Create subject performance chart using filtered data
+        const filteredData = filteredAssessments.value;
+        const quizAvg = calculateTypeAverage(filteredData, 'Quiz');
+        const activityAvg = calculateTypeAverage(filteredData, 'Activity');
+        const performanceTaskAvg = calculateTypeAverage(filteredData, 'Performance Task');
+
+        new Chart(subjectChart.value, {
           type: 'bar',
           data: {
             labels: ['Quizzes', 'Activities', 'Performance Tasks'],
             datasets: [{
               label: 'Average Score (%)',
-              data: [
-                performanceData.quizAverage || 0,
-                performanceData.activityAverage || 0,
-                performanceData.performanceTaskAverage || 0
-              ],
+              data: [quizAvg, activityAvg, performanceTaskAvg],
               backgroundColor: [
                 'rgba(0, 51, 102, 0.7)',
                 'rgba(0, 51, 102, 0.5)',
@@ -626,21 +720,70 @@ export default {
               },
               title: {
                 display: true,
-                text: 'Student Performance Summary',
+                text: 'Subject Performance Summary',
                 font: {
                   size: 16
                 }
               }
             }
           }
-        })
+        });
+
+        // Create attendance chart
+        new Chart(attendanceChart.value, {
+          type: 'doughnut',
+          data: {
+            labels: ['Present', 'Absent', 'Late'],
+            datasets: [{
+              data: [
+                performanceData.attendanceData?.present || 0,
+                performanceData.attendanceData?.absent || 0,
+                performanceData.attendanceData?.late || 0
+              ],
+              backgroundColor: [
+                'rgba(28, 200, 138, 0.8)',
+                'rgba(231, 74, 59, 0.8)',
+                'rgba(246, 194, 62, 0.8)'
+              ]
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                position: 'bottom'
+              },
+              title: {
+                display: true,
+                text: 'Attendance Distribution',
+                font: {
+                  size: 16
+                }
+              }
+            }
+          }
+        });
       } catch (error) {
-        console.error('Failed to fetch student performance:', error)
-        // Don't show the error alert since we still want to show the modal
-        // Just log the error and continue showing the student details
-        selectedStudent.value = student // Ensure the student details are still shown
+        console.error('Failed to fetch student performance:', error);
+        selectedStudent.value = student;
       }
-    }
+    };
+
+    // Update formatDate function to handle createdAt
+    const formatDate = (dateString) => {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      // Adjust for Philippine timezone (UTC+8)
+      date.setHours(date.getHours() + 8);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Manila'
+      });
+    };
 
     // Filter students
     const filteredStudents = computed(() => {
@@ -873,6 +1016,94 @@ export default {
       return 'score-poor'
     }
 
+    // Update filteredAssessments computed property to use createdAt
+    const filteredAssessments = computed(() => {
+      if (!selectedStudent.value?.assessments) return [];
+
+      return selectedStudent.value.assessments.filter(assessment => {
+        const assessmentDate = new Date(assessment.createdAt);
+        let passesDateFilter = true;
+
+        if (historyStartDate.value && historyEndDate.value) {
+          const startDate = new Date(historyStartDate.value);
+          startDate.setUTCHours(0, 0, 0, 0);
+          startDate.setHours(startDate.getHours() + 8); // Adjust for Philippine timezone
+          
+          const endDate = new Date(historyEndDate.value);
+          endDate.setUTCHours(23, 59, 59, 999);
+          endDate.setHours(endDate.getHours() + 8); // Adjust for Philippine timezone
+          
+          passesDateFilter = assessmentDate >= startDate && assessmentDate <= endDate;
+        }
+
+        return passesDateFilter;
+      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by createdAt
+    });
+
+    // Update formatDateForDisplay to use Philippine timezone
+    const formatDateForDisplay = (dateString) => {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      // Adjust for Philippine timezone
+      date.setHours(date.getHours() + 8);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Manila'
+      });
+    };
+
+    // Add click outside handler to close date pickers
+    const handleClickOutside = (event) => {
+      const startPickerContainer = document.querySelector('.date-input-container:first-child');
+      const endPickerContainer = document.querySelector('.date-input-container:last-child');
+      
+      if (startPickerContainer && !startPickerContainer.contains(event.target)) {
+        showStartDatePicker.value = false;
+      }
+      
+      if (endPickerContainer && !endPickerContainer.contains(event.target)) {
+        showEndDatePicker.value = false;
+      }
+    };
+
+    // Add event listener for click outside
+    onMounted(() => {
+      document.addEventListener('click', handleClickOutside);
+    });
+
+    onUnmounted(() => {
+      document.removeEventListener('click', handleClickOutside);
+    });
+
+    // Update clear filter function
+    const clearHistoryDateFilter = () => {
+      historyStartDate.value = '';
+      historyEndDate.value = '';
+      showStartDatePicker.value = false;
+      showEndDatePicker.value = false;
+    };
+
+    // Add watcher for date filter changes
+    watch([historyStartDate, historyEndDate], async () => {
+      if (selectedStudent.value) {
+        await viewStudent(selectedStudent.value);
+      }
+    });
+
+    // Add helper function to calculate averages for filtered data
+    const calculateTypeAverage = (assessments, type) => {
+      const typeAssessments = assessments.filter(a => a.type === type);
+      if (typeAssessments.length === 0) return 0;
+      
+      const sum = typeAssessments.reduce((acc, curr) => {
+        return acc + (curr.score / curr.maxScore * 100);
+      }, 0);
+      
+      return Number((sum / typeAssessments.length).toFixed(2));
+    };
+
     return {
       students,
       selectedYear,
@@ -908,13 +1139,151 @@ export default {
       editStudent,
       applyFilters,
       getAssessmentBadgeClass,
-      getScoreClass
+      getScoreClass,
+      availableYears,
+      availableSections,
+      formatDate,
+      historyStartDate,
+      historyEndDate,
+      filteredAssessments,
+      showStartDatePicker,
+      showEndDatePicker,
+      formatDateForDisplay,
+      clearHistoryDateFilter,
     }
   }
 }
 </script>
 
 <style scoped>
+/* Base z-index hierarchy */
+:root {
+  --z-nav: 1000;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-modal-dialog: 1060;
+  --z-datepicker: 1070;
+}
+
+/* Navigation styles (if present in this component) */
+.navigation {
+  z-index: var(--z-nav);
+}
+
+/* Modal wrapper styles */
+.modal-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: var(--z-modal-backdrop);
+}
+
+.modal-dialog {
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  margin: 1.75rem auto;
+  z-index: var(--z-modal-dialog);
+}
+
+.modal-dialog.modal-lg {
+  max-width: 800px;
+}
+
+/* Date filter styles */
+.date-filter {
+  position: relative;
+  z-index: var(--z-datepicker);
+}
+
+.date-filter .form-control {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 150px;
+  position: relative;
+  z-index: var(--z-datepicker);
+}
+
+/* Ensure date picker is visible */
+.date-filter input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  position: relative;
+  z-index: var(--z-datepicker);
+  cursor: pointer;
+  background: transparent;
+  padding: 0.5rem;
+  margin-right: -0.5rem;
+}
+
+.date-filter .form-control::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 1;
+}
+
+.date-filter .form-control:focus {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+  z-index: var(--z-datepicker);
+}
+
+/* Modal header styles */
+.history-header {
+  background-color: #003366;
+  padding: 1rem;
+  font-weight: 600;
+  color: white;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  z-index: var(--z-modal);
+}
+
+/* Update existing modal styles */
+.modal.fade.show {
+  z-index: var(--z-modal);
+}
+
+.modal-content {
+  position: relative;
+  z-index: var(--z-modal-dialog);
+  background: white;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure proper stacking for nested elements */
+.student-info-card,
+.performance-card,
+.history-card {
+  position: relative;
+  z-index: 1;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: visible;
+}
+
 .student-management {
   padding: 20px;
 }
@@ -996,51 +1365,6 @@ export default {
 .form-select:focus {
   border-color: var(--primary-color);
   box-shadow: 0 0 0 0.2rem rgba(0, 51, 102, 0.15);
-}
-
-.modal-wrapper {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  padding: 1rem;
-}
-
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  z-index: 1999;
-}
-
-.modal-dialog {
-  position: relative;
-  width: 90%;
-  max-width: 500px;
-  margin: 1.75rem auto;
-  z-index: 2001;
-}
-
-.modal-dialog.modal-lg {
-  max-width: 800px;
-}
-
-.modal-content {
-  background: white;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  position: relative;
-  overflow: hidden;
 }
 
 .modal-header {
@@ -1222,5 +1546,105 @@ export default {
 
 .btn-close-white {
   filter: brightness(0) invert(1);
+}
+
+/* Add these new styles */
+.date-filter .form-control {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 150px;
+}
+
+.date-filter .form-control::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+.date-filter .form-control:focus {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.date-filter span {
+  padding: 0 0.5rem;
+}
+
+/* New date picker styles */
+.date-input-container {
+  position: relative;
+  display: inline-block;
+}
+
+.date-picker-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  min-width: 250px;
+}
+
+.date-picker-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.date-picker-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.date-picker-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: 4px;
+}
+
+.date-filter .form-control {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 150px;
+  cursor: pointer;
+}
+
+.date-filter .form-control:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.date-filter span {
+  padding: 0 0.5rem;
+  color: white;
+}
+
+/* Ensure the date picker appears above other content */
+.history-card {
+  position: relative;
+  overflow: visible !important;
+}
+
+.history-header {
+  position: relative;
+  overflow: visible;
 }
 </style> 

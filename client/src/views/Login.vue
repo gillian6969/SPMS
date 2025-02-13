@@ -131,19 +131,69 @@ export default {
             loginType: loginType.value
           }
 
+          console.log('Attempting login with:', { 
+            email: credentials.email, 
+            loginType: credentials.loginType,
+            timestamp: new Date().toISOString()
+          })
+
           const response = await store.dispatch('login', credentials)
+          console.log('Login response received:', {
+            requiresOTP: response.data.requiresOTP,
+            userRole: response.data.user?.role,
+            loginType: loginType.value,
+            timestamp: new Date().toISOString()
+          })
           
           if (response.data.requiresOTP) {
+            console.log('OTP required, showing OTP input')
             showOTP.value = true
             return
           }
+
+          // If we get here, it means login was successful without OTP
+          const user = response.data.user
+          console.log('User data received:', {
+            role: user.role,
+            loginType: loginType.value,
+            timestamp: new Date().toISOString()
+          })
+          
+          // Check login type before proceeding
+          if (loginType.value === 'citHead' && user.role !== 'citHead') {
+            console.log('Access denied: Non-CIT Head using CIT Head login')
+            error.value = 'Access denied. Please use the Teacher/Student login.'
+            await store.dispatch('logout')
+            return
+          }
+          
+          if (loginType.value === 'user' && user.role === 'citHead') {
+            console.log('Access denied: CIT Head using regular login')
+            error.value = 'Access denied. Please use the CIT Head login.'
+            await store.dispatch('logout')
+            return
+          }
+
+          router.push('/dashboard')
         } else {
           // Second step: Verify OTP
+          console.log('Verifying OTP:', {
+            loginType: loginType.value,
+            timestamp: new Date().toISOString()
+          })
           const response = await store.dispatch('verifyOTP', otp.value)
           
           // After successful OTP verification
           const user = response.data.user
+          console.log('OTP verification successful:', {
+            role: user.role,
+            loginType: loginType.value,
+            timestamp: new Date().toISOString()
+          })
+          
+          // Double check login type after OTP
           if (loginType.value === 'citHead' && user.role !== 'citHead') {
+            console.log('Access denied after OTP: Non-CIT Head using CIT Head login')
             error.value = 'Access denied. Please use the Teacher/Student login.'
             await store.dispatch('logout')
             showOTP.value = false
@@ -151,16 +201,37 @@ export default {
           }
           
           if (loginType.value === 'user' && user.role === 'citHead') {
+            console.log('Access denied after OTP: CIT Head using regular login')
             error.value = 'Access denied. Please use the CIT Head login.'
             await store.dispatch('logout')
             showOTP.value = false
             return
           }
 
+          console.log('Login successful, redirecting to dashboard')
           router.push('/dashboard')
         }
       } catch (err) {
-        error.value = err.response?.data?.message || 'Login failed. Please try again.'
+        console.error('Login error:', {
+          error: err,
+          response: err.response?.data,
+          status: err.response?.status,
+          timestamp: new Date().toISOString()
+        })
+        
+        // Handle specific error cases
+        if (err.response?.data?.error === 'email_service_error') {
+          error.value = 'Unable to send verification code. Please check your email configuration or try again later.'
+        } else if (err.response?.data?.error === 'otp_process_error') {
+          error.value = 'Error processing verification code. Please try again.'
+        } else if (err.response?.status === 403) {
+          error.value = err.response.data.message || 'Access denied. Please check your login type.'
+        } else if (err.response?.status === 400) {
+          error.value = err.response.data.message || 'Invalid credentials. Please try again.'
+        } else {
+          error.value = 'Login failed. Please try again.'
+        }
+        
         if (showOTP.value) {
           otp.value = '' // Clear OTP field on error
         }

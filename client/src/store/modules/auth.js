@@ -19,27 +19,49 @@ const getters = {
 const actions = {
   async login({ commit }, credentials) {
     try {
+      console.log('Making login request with:', { ...credentials, password: '****' })
       const response = await axios.post('http://localhost:8000/api/auth/login', credentials)
+      console.log('Login response:', response.data)
       
       if (response.data.requiresOTP) {
         // Store temporary token and set OTP required flag
         commit('SET_TEMP_TOKEN', response.data.tempToken)
         commit('SET_REQUIRES_OTP', true)
-        return response
+        commit('SET_USER', response.data.user) // Store the partial user data
+      } else {
+        // If no OTP required, store the full user data
+        const { token, user } = response.data
+        localStorage.setItem('token', token)
+        localStorage.setItem('user', JSON.stringify(user))
+        commit('SET_TOKEN', token)
+        commit('SET_USER', user)
+        commit('SET_REQUIRES_OTP', false)
+        commit('SET_TEMP_TOKEN', null)
+        
+        // Set axios default header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       }
 
       return response
     } catch (error) {
+      console.error('Login error in store:', error.response || error)
+      // Clear any partial state on error
+      commit('SET_TOKEN', null)
+      commit('SET_USER', null)
+      commit('SET_REQUIRES_OTP', false)
+      commit('SET_TEMP_TOKEN', null)
       throw error
     }
   },
 
   async verifyOTP({ commit, state }, otp) {
     try {
+      console.log('Verifying OTP with token:', state.tempToken)
       const response = await axios.post('http://localhost:8000/api/auth/verify-otp', {
         otp,
         tempToken: state.tempToken
       })
+      console.log('OTP verification response:', response.data)
 
       const { token, user } = response.data
 
@@ -58,6 +80,12 @@ const actions = {
 
       return response
     } catch (error) {
+      console.error('OTP verification error in store:', error.response || error)
+      // Clear state on error
+      commit('SET_TOKEN', null)
+      commit('SET_USER', null)
+      commit('SET_REQUIRES_OTP', false)
+      commit('SET_TEMP_TOKEN', null)
       throw error
     }
   },
