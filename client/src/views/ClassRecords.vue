@@ -2,7 +2,7 @@
   <div class="class-records">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div class="d-flex gap-2">
-        <button class="btn btn-primary" @click="showAddStudentRecordModal = true">
+        <button class="btn btn-primary" @click="openAddStudentRecordModal">
           <i class="fas fa-user-plus"></i> Add Student Record
         </button>
         <button class="btn btn-primary" @click="showAddAssessmentModal = true">
@@ -233,7 +233,6 @@
           </div>
         </div>
       </div>
-      <div class="modal-backdrop"></div>
     </div>
 
     <!-- Student Details Modal -->
@@ -445,7 +444,7 @@
 
     <!-- Add Student Record Modal -->
     <div v-if="showAddStudentRecordModal" class="modal-overlay">
-      <div class="modal-wrapper">
+      <div class="modal-wrapper" @click.stop>
         <div class="modal-dialog">
           <div class="modal-content">
             <div class="modal-header">
@@ -464,30 +463,26 @@
                     </option>
                   </select>
                 </div>
-
                 <!-- Section Selection -->
                 <div class="mb-3">
                   <label class="form-label">Section</label>
-                  <select class="form-select" v-model="newStudentRecord.section" required>
+                  <select class="form-select" v-model="newStudentRecord.section" :disabled="!canSelectSection" required>
                     <option value="">Select Section</option>
                     <option v-for="section in availableSections" :key="section" :value="section">
                       {{ section }}
                     </option>
                   </select>
                 </div>
-
-                <!-- Subject Input -->
+                <!-- Subject Selection -->
                 <div class="mb-3">
                   <label class="form-label">Subject</label>
-                  <input 
-                    type="text" 
-                    class="form-control" 
-                    v-model="newStudentRecord.subject" 
-                    placeholder="Enter subject name"
-                    required
-                  >
+                  <select class="form-select" v-model="newStudentRecord.subject" :disabled="!canSelectSubject" required>
+                    <option value="">Select Subject</option>
+                    <option v-for="subject in teacherSubjects" :key="subject" :value="subject">
+                      {{ subject }}
+                    </option>
+                  </select>
                 </div>
-
                 <div class="d-flex justify-content-end gap-2">
                   <button type="button" class="btn btn-secondary" @click="showAddStudentRecordModal = false">
                     Cancel
@@ -501,74 +496,6 @@
           </div>
         </div>
       </div>
-      <div class="modal-backdrop"></div>
-    </div>
-
-    <!-- Edit Assessment Modal -->
-    <div v-if="showEditAssessmentModal" class="modal-overlay">
-      <div class="modal-wrapper">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Edit Assessment</h5>
-              <button type="button" class="btn-close" @click="showEditAssessmentModal = false"></button>
-            </div>
-            <div class="modal-body">
-              <form @submit.prevent="handleEditAssessment">
-                <!-- Assessment Type -->
-                <div class="mb-3">
-                  <label class="form-label">Type</label>
-                  <select class="form-select" v-model="editingAssessment.type" required>
-                    <option value="">Select Type</option>
-                    <option value="Quiz">Quiz</option>
-                    <option value="Activity">Activity</option>
-                    <option value="Performance Task">Performance Task</option>
-                  </select>
-                </div>
-
-                <!-- Assessment Number -->
-                <div class="mb-3">
-                  <label class="form-label">Number</label>
-                  <input 
-                    type="number" 
-                    class="form-control" 
-                    v-model="editingAssessment.number"
-                    min="1"
-                    required
-                  >
-                </div>
-
-                <!-- Max Score -->
-                <div class="mb-3">
-                  <label class="form-label">Maximum Score</label>
-                  <input 
-                    type="number" 
-                    class="form-control" 
-                    v-model="editingAssessment.maxScore"
-                    min="1"
-                    required
-                  >
-                </div>
-
-                <div class="d-flex justify-content-between">
-                  <button type="button" class="btn btn-danger" @click="handleDeleteAssessment">
-                    <i class="fas fa-trash me-1"></i> Delete Assessment
-                  </button>
-                  <div>
-                    <button type="button" class="btn btn-secondary me-2" @click="showEditAssessmentModal = false">
-                      Cancel
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                      Save Changes
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-backdrop"></div>
     </div>
   </div>
 </template>
@@ -586,13 +513,38 @@ export default {
   setup() {
     const store = useStore()
     const router = useRouter()
-    const user = ref(store.state.auth.user || {
-      teachingYear: 'N/A',
-      _id: null,
-      firstName: '',
-      lastName: ''
-    })
+    const user = ref(store.state.auth.user || null)
     
+    // Add user profile fetching
+    const fetchUserProfile = async () => {
+      try {
+        console.log('Fetching user profile...')
+        const response = await axios.get('http://localhost:8000/api/users/profile', {
+          headers: {
+            'Authorization': `Bearer ${store.state.auth.token}`
+          }
+        })
+        console.log('User profile response:', response.data)
+        user.value = response.data
+        
+        // Check if user is a teacher
+        if (!user.value || user.value.role !== 'teacher') {
+          console.log('User is not a teacher:', user.value?.role)
+          router.push('/dashboard')
+          return
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error)
+        router.push('/login')
+      }
+    }
+
+    // Call fetchUserProfile when component mounts
+    onMounted(async () => {
+      await fetchUserProfile()
+      await fetchTeacherSubjects()
+    })
+
     const selectedYear = ref(localStorage.getItem('selectedYear') || '')
     const selectedSection = ref(localStorage.getItem('selectedSection') || '')
     const selectedSubject = ref(localStorage.getItem('selectedSubject') || '')
@@ -634,8 +586,8 @@ export default {
       maxScore: ''
     })
 
-    const availableYears = ref(['1st', '2nd', '3rd', '4th'])
-    const availableSections = ref(['South 1', 'South 2', 'South 3'])
+    const availableYears = ref([])
+    const availableSections = ref([])
     const teacherSubjects = ref([])
 
     const teachingYear = computed(() => {
@@ -1116,24 +1068,18 @@ export default {
     // Handle adding new student record
     const handleAddStudentRecord = async () => {
       try {
-        const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id || user.value?._id
+        const token = store.state.auth.token;
+        const teacherId = store.state.auth.user?._id || user.value?._id;
 
         if (!teacherId) {
-          console.error('Teacher ID is not available')
-          alert('Teacher information is not available. Please try logging in again.')
-          store.dispatch('logout')
-          router.push('/login')
-          return
+          console.error('Teacher ID is not available');
+          alert('Teacher information is not available. Please try logging in again.');
+          store.dispatch('logout');
+          router.push('/login');
+          return;
         }
 
-        console.log('Starting to add student record with:', {
-          year: newStudentRecord.value.year,
-          section: newStudentRecord.value.section,
-          subject: newStudentRecord.value.subject
-        });
-
-        // First, fetch students from the selected year and section
+        // Fetch students from the selected year and section
         const studentsResponse = await axios.get('http://localhost:8000/api/students/by-section', {
           params: {
             year: newStudentRecord.value.year,
@@ -1142,13 +1088,11 @@ export default {
           headers: {
             'Authorization': `Bearer ${token}`
           }
-        })
-
-        console.log('Students fetched:', studentsResponse.data);
+        });
 
         if (!studentsResponse.data || studentsResponse.data.length === 0) {
-          alert('No students found in the selected year and section.')
-          return
+          alert('No students found in the selected year and section.');
+          return;
         }
 
         // Create basic class record entries for the teacher
@@ -1165,9 +1109,7 @@ export default {
             year: student.year,
             section: student.section
           }))
-        }
-
-        console.log('Creating class record with data:', classRecordData);
+        };
 
         // Save the class record
         const createResponse = await axios.post('http://localhost:8000/api/teacher-class-records/create', 
@@ -1181,43 +1123,43 @@ export default {
         );
 
         if (createResponse.data.success) {
-          showAddStudentRecordModal.value = false
-          newStudentRecord.value = { year: '', section: '', subject: '' }
-          await updateTeacherSubjects() // Update the subjects list
-          await fetchClassData()
-          alert('Student records have been added successfully!')
+          showAddStudentRecordModal.value = false;
+          newStudentRecord.value = { year: '', section: '', subject: '' };
+          await updateTeacherSubjects(); // Update the subjects list
+          await fetchClassData();
+          alert('Student records have been added successfully!');
         } else {
-          throw new Error('Failed to create class records')
+          throw new Error('Failed to create class records');
         }
       } catch (error) {
-        console.error('Failed to add class records:', error)
-        alert('Failed to add class records. ' + (error.response?.data?.message || error.message || 'Please try again.'))
+        console.error('Failed to add class records:', error);
+        alert('Failed to add class records. ' + (error.response?.data?.message || error.message || 'Please try again.'));
       }
-    }
+    };
 
     // Watch for changes in year selection
     watch(selectedYear, async (newYear) => {
       if (newYear) {
-        selectedSection.value = ''
-        selectedSubject.value = ''
-        localStorage.setItem('selectedYear', newYear)
-        await fetchAvailableSections()
+        selectedSection.value = ''; // Reset section
+        selectedSubject.value = ''; // Reset subject
+        localStorage.setItem('selectedYear', newYear);
+        await fetchAvailableSections(); // Fetch sections based on selected year
       } else {
-        availableSections.value = []
-        teacherSubjects.value = []
-        localStorage.removeItem('selectedYear')
+        availableSections.value = [];
+        teacherSubjects.value = [];
+        localStorage.removeItem('selectedYear');
       }
     })
 
     // Watch for changes in section selection
     watch(selectedSection, async (newSection) => {
       if (newSection) {
-        selectedSubject.value = ''
-        localStorage.setItem('selectedSection', newSection)
-        await updateTeacherSubjects()
+        selectedSubject.value = ''; // Reset subject
+        localStorage.setItem('selectedSection', newSection);
+        await updateTeacherSubjects(); // Fetch subjects based on selected section
       } else {
-        teacherSubjects.value = []
-        localStorage.removeItem('selectedSection')
+        teacherSubjects.value = [];
+        localStorage.removeItem('selectedSection');
       }
     })
 
@@ -1252,50 +1194,56 @@ export default {
     onMounted(async () => {
       if (store.getters.isLoggedIn) {
         try {
-          const token = store.state.auth.token
+          const token = store.state.auth.token;
+          if (!token) {
+            console.error('No auth token found');
+            router.push('/login');
+            return;
+          }
+
+          console.log('Fetching user profile...');
           const response = await axios.get('http://localhost:8000/api/users/profile', {
             headers: {
               'Authorization': `Bearer ${token}`
             }
-          })
+          });
+          
+          console.log('User profile response:', response.data);
           
           if (response.data && response.data.role === 'teacher') {
-            user.value = response.data
-            console.log('Teacher data loaded:', user.value)
+            user.value = response.data;
+            console.log('Teacher data loaded:', user.value);
             
             // Fetch available years first
-            await fetchAvailableYears()
+            await fetchAvailableYears();
             
             // If year is selected, fetch sections
             if (selectedYear.value) {
-              await fetchAvailableSections()
+              await fetchAvailableSections();
               
               // If section is selected, fetch subjects
               if (selectedSection.value) {
-                await updateTeacherSubjects()
+                await updateTeacherSubjects();
                 
                 // If subject is selected, fetch class data and assessments
                 if (selectedSubject.value) {
                   await Promise.all([
                     fetchClassData(),
                     fetchAssessments()
-                  ])
+                  ]);
                 }
               }
             }
           } else {
-            console.error('User is not a teacher')
-            router.push('/login')
+            console.error('User is not a teacher:', response.data);
+            router.push('/login');
           }
         } catch (error) {
-          console.error('Failed to fetch teacher data:', error)
-          if (error.response?.status === 401) {
-            store.dispatch('logout')
-            router.push('/login')
-          }
+          handleApiError(error, 'onMounted');
         }
       } else {
-        router.push('/login')
+        console.log('User not logged in, redirecting to login');
+        router.push('/login');
       }
     })
 
@@ -1527,16 +1475,22 @@ export default {
     // Fetch available years for the teacher
     const fetchAvailableYears = async () => {
       try {
-        const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id
+        console.log('Starting fetchAvailableYears...');
+        const token = store.state.auth.token;
+        const teacherId = store.state.auth.user?._id;
 
-        if (!teacherId) return
+        if (!teacherId) {
+          console.error('No teacherId available');
+          return;
+        }
 
+        console.log('Making API request for available years...');
         const response = await axios.get('http://localhost:8000/api/teacher-class-records', {
           params: { teacherId },
           headers: { 'Authorization': `Bearer ${token}` }
-        })
+        });
 
+        console.log('Available years response:', response.data);
         // Extract unique years from teacher's records
         const years = [...new Set(response.data.map(record => record.year))]
         availableYears.value = years.sort()
@@ -1546,19 +1500,19 @@ export default {
           selectedYear.value = availableYears.value[0]
         }
       } catch (error) {
-        console.error('Failed to fetch available years:', error)
+        handleApiError(error, 'fetchAvailableYears');
       }
     }
 
     // Fetch available sections for the selected year
     const fetchAvailableSections = async () => {
       try {
-        const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id
+        const token = store.state.auth.token;
+        const teacherId = store.state.auth.user?._id;
 
         if (!teacherId || !selectedYear.value) {
-          availableSections.value = []
-          return
+          availableSections.value = [];
+          return;
         }
 
         const response = await axios.get('http://localhost:8000/api/teacher-class-records', {
@@ -1567,20 +1521,24 @@ export default {
             year: selectedYear.value
           },
           headers: { 'Authorization': `Bearer ${token}` }
-        })
+        });
 
         // Extract unique sections from teacher's records for the selected year
-        const sections = [...new Set(response.data.map(record => record.section))]
-        availableSections.value = sections.sort()
+        const sections = [...new Set(response.data.map(record => record.section))];
+        availableSections.value = sections.sort();
 
         // If no section is selected but we have sections available, select the first one
         if (!selectedSection.value && availableSections.value.length > 0) {
-          selectedSection.value = availableSections.value[0]
+          selectedSection.value = availableSections.value[0];
         }
       } catch (error) {
-        console.error('Failed to fetch available sections:', error)
+        console.error('Failed to fetch available sections:', error);
       }
-    }
+    };
+
+    // Disable section and subject until year is selected
+    const canSelectSection = computed(() => !!selectedYear.value);
+    const canSelectSubject = computed(() => !!selectedSection.value);
 
     // Add computed property for filtered assessments
     const filteredAssessments = computed(() => {
@@ -1785,6 +1743,70 @@ export default {
       return currentDateCopy > today
     })
 
+    // Add this near the top of the setup function
+    const handleApiError = (error, context) => {
+      console.error(`Error in ${context}:`, error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      if (error.response?.status === 401) {
+        store.dispatch('logout');
+        router.push('/login');
+      }
+    };
+
+    // Add new method to fetch available years and sections
+    const fetchAvailableYearsAndSections = async () => {
+      try {
+        const token = store.state.auth.token;
+        const response = await axios.get('http://localhost:8000/api/students', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.data) {
+          // Extract unique years and sections
+          availableYears.value = [...new Set(response.data.map(student => student.year))].sort();
+          availableSections.value = [...new Set(response.data.map(student => student.section))].sort();
+        }
+      } catch (error) {
+        console.error('Failed to fetch years and sections:', error);
+      }
+    };
+
+    // Add method to fetch teacher subjects
+    const fetchTeacherSubjects = async () => {
+      try {
+        const token = store.state.auth.token;
+        const teacherId = store.state.auth.user?._id;
+
+        if (!teacherId) {
+          console.error('Teacher ID not available');
+          return;
+        }
+
+        const response = await axios.get('http://localhost:8000/api/users/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.data && response.data.subjects) {
+          teacherSubjects.value = response.data.subjects.sort();
+          console.log('Fetched teacher subjects:', teacherSubjects.value);
+        }
+      } catch (error) {
+        console.error('Failed to fetch teacher subjects:', error);
+      }
+    };
+
+    // Modify the existing showAddStudentRecordModal watcher or toggle function
+    const openAddStudentRecordModal = async () => {
+      await fetchAvailableYearsAndSections();
+      await fetchTeacherSubjects();
+      showAddStudentRecordModal.value = true;
+    };
+
     return {
       selectedYear,
       selectedSection,
@@ -1846,7 +1868,10 @@ export default {
       openChartDateFilter,
       openHistoryDateFilter,
       slideDirection,
-      isNextDayDisabled
+      isNextDayDisabled,
+      openAddStudentRecordModal,
+      canSelectSection,
+      canSelectSubject
     }
   }
 }
@@ -1856,7 +1881,7 @@ export default {
 /* Remove the top-navbar styles */
 .class-records {
   padding: 1.5rem 2rem;
-  background: #f8f9fa;
+  background:rgb(255, 255, 255);
   min-height: calc(100vh - 70px);
 }
 
@@ -2845,11 +2870,11 @@ input[type="date"].form-control:focus {
 
 /* Base z-index hierarchy */
 :root {
-  --z-nav: 1000;
+  --z-sidebar: 1000;
   --z-modal-backdrop: 1040;
-  --z-modal: 1050;
-  --z-modal-dialog: 1060;
-  --z-datepicker: 9999;
+  --z-modal-overlay: 1050;
+  --z-modal-wrapper: 1060;
+  --z-modal-content: 1070;
 }
 
 /* Modal Styles */
@@ -2857,29 +2882,105 @@ input[type="date"].form-control:focus {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-datepicker);
+  z-index: var(--z-modal-overlay);
+  backdrop-filter: blur(5px);
+}
+
+.modal-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  margin: 1.75rem;
+  z-index: var(--z-modal-wrapper);
+}
+
+.modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: #fff;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  z-index: var(--z-modal-content);
 }
 
 .modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   background-color: rgba(0, 0, 0, 0.5);
   z-index: var(--z-modal-backdrop);
+  cursor: pointer;
 }
 
+/* Ensure sidebar is hidden when modal is open */
+.modal-overlay ~ .sidebar {
+  z-index: var(--z-sidebar);
+  visibility: hidden;
+}
+
+/* Update modal-dialog styles */
 .modal-dialog {
   position: relative;
   width: 100%;
   pointer-events: auto;
-  z-index: var(--z-modal-dialog);
+  z-index: var(--z-modal-wrapper);
+}
+
+/* Ensure proper stacking for nested modals */
+.modal-overlay .modal-overlay {
+  z-index: calc(var(--z-modal-overlay) + 10);
+}
+
+.modal-overlay .modal-wrapper {
+  z-index: calc(var(--z-modal-wrapper) + 10);
+}
+
+.modal-overlay .modal-content {
+  z-index: calc(var(--z-modal-content) + 10);
+}
+
+.modal-overlay .modal-backdrop {
+  z-index: calc(var(--z-modal-backdrop) + 10);
+}
+
+/* Remove the style that was causing the issue */
+.modal-backdrop {
+  z-index: var(--z-modal-backdrop) !important;
+}
+
+/* Ensure modal body is above backdrop */
+.modal-body {
+  position: relative;
+  z-index: calc(var(--z-modal-content) + 1);
+}
+
+/* Update student details modal styles */
+.modal-dialog.modal-xl {
+  max-width: 1200px;
+}
+
+/* Ensure form elements are clickable */
+.modal-content form {
+  position: relative;
+  z-index: calc(var(--z-modal-content) + 2);
+}
+
+/* Update form controls to ensure they're above backdrop */
+.modal-content .form-control,
+.modal-content .form-select,
+.modal-content .btn {
+  position: relative;
+  z-index: calc(var(--z-modal-content) + 3);
 }
 
 /* Date picker specific styles */
@@ -2991,5 +3092,22 @@ input[type="date"].form-control:focus {
   border-color: #dee2e6;
   color: #6c757d;
   cursor: not-allowed;
+}
+
+/* Add styles for modal background blur */
+.modal-overlay {
+  backdrop-filter: blur(5px);
+}
+
+/* Ensure modal closes when clicking outside */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+  cursor: pointer;
 }
 </style> 

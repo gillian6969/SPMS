@@ -41,10 +41,17 @@ const teacherClassRecordSchema = new mongoose.Schema({
   }
 });
 
-// Update the updatedAt timestamp before saving
+// Add index for better query performance
+teacherClassRecordSchema.index({ teacherId: 1, year: 1, section: 1, subject: 1 });
+
+// Add error handling for the pre-save middleware
 teacherClassRecordSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
+  try {
+    this.updatedAt = Date.now();
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = mongoose.model('TeacherClassRecord', teacherClassRecordSchema); 

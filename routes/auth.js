@@ -68,6 +68,9 @@ router.post('/register', auth, isCITHead, async (req, res) => {
 
     await user.save();
 
+    // Log user registration details
+    console.log('Registering user:', { firstName, lastName, email, role, teachingYear, subjects });
+
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
@@ -119,15 +122,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    console.log('User found:', { 
-      id: user._id, 
-      role: user.role, 
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      attemptedLoginType: loginType,
-      timestamp: new Date().toISOString()
-    });
+    console.log('User found during login:', { id: user._id, role: user.role, email: user.email });
 
     // Validate password
     const isMatch = await bcryptjs.compare(password, user.password);

@@ -61,6 +61,10 @@ router.get('/', auth, async (req, res) => {
   try {
     const { teacherId, year, section, subject } = req.query;
     
+    // Log user role and parameters
+    console.log('Accessing class records with parameters:', { teacherId, year, section, subject });
+    console.log('User role:', req.user.role);
+
     const query = { teacherId };
     if (year) query.year = year;
     if (section) query.section = section;

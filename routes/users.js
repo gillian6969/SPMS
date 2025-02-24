@@ -7,9 +7,25 @@ const bcrypt = require('bcrypt');
 // Get user profile
 router.get('/profile', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
-    res.json(user);
+    console.log('Fetching user profile for ID:', req.user._id);
+    const user = await User.findById(req.user._id)
+      .select('-password')
+      .lean();
+    
+    if (!user) {
+      console.log('User not found in database');
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log('Found user:', { id: user._id, role: user.role });
+    res.json({
+      ...user,
+      role: user.role || null,
+      teachingYear: user.teachingYear || null,
+      subjects: user.subjects || []
+    });
   } catch (error) {
+    console.error('Error fetching user profile:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
