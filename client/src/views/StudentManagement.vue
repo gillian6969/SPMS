@@ -1,12 +1,5 @@
 <template>
   <div class="student-management">
-    <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <button class="btn btn-primary" @click="showAddStudentModal = true">
-        <i class="fas fa-plus"></i> Add Student List
-      </button>
-    </div>
-
     <!-- Table Container -->
     <div class="table-container">
         <!-- Table Controls -->
@@ -51,28 +44,23 @@
                 data-bs-toggle="dropdown" 
                 aria-expanded="false"
               >
-                <i class="fas fa-filter me-2"></i> Filter
+                <i class="fas fa-filter me-2"></i> View Section
                 <span v-if="hasActiveFilters" class="filter-badge">!</span>
               </button>
               <div class="dropdown-menu shadow-lg p-3" aria-labelledby="filterDropdown">
-                <h6 class="dropdown-header px-0 mb-2">Filter Options</h6>
+                <h6 class="dropdown-header px-0 mb-2">Available Sections</h6>
                 <div class="mb-3">
-                  <label class="form-label">Year Level</label>
-                  <select class="form-select form-select-sm" v-model="selectedYear" @change="applyFilters">
-                    <option value="">All Years</option>
-                    <option v-for="year in availableYears" :value="year">{{ year }}</option>
-                  </select>
-                </div>
-                <div class="mb-3">
-                  <label class="form-label">Section</label>
-                  <select class="form-select form-select-sm" v-model="selectedSection" @change="applyFilters">
-                    <option value="">All Sections</option>
-                    <option v-for="section in availableSections" :value="section">{{ section }}</option>
-                  </select>
-                </div>
-                <div class="d-flex justify-content-end gap-2 mt-3">
-                  <button class="btn btn-sm btn-light" @click="clearFilters">Clear All</button>
-                  <button class="btn btn-sm btn-primary" @click="applyFilters">Apply Filters</button>
+                  <div v-if="teacherSections.length === 0" class="text-muted">
+                    No sections available
+                  </div>
+                  <div v-for="section in teacherSections" :key="section.id" class="mb-2">
+                    <button 
+                      class="btn btn-outline-primary w-100 text-start"
+                      @click="selectSection(section)"
+                    >
+                      {{ section.year }} - {{ section.section }}
+                    </button>
+                  </div>
                 </div>
                 </div>
               </div>
@@ -102,6 +90,16 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="d-flex gap-2 mb-3">
+          <button 
+            class="btn btn-primary" 
+            @click="syncStudentRecords"
+            :disabled="!selectedYear || !selectedSection"
+          >
+            <i class="fas fa-sync-alt me-1"></i> Sync Student Records
+          </button>
         </div>
 
         <div class="table-responsive">
@@ -400,14 +398,7 @@ export default {
   setup() {
     const store = useStore()
     const students = ref([])
-    const selectedYear = ref('')
-    const selectedSection = ref('')
     const searchQuery = ref('')
-    const showAddStudentModal = ref(false)
-    const uploadYear = ref('')
-    const uploadSection = ref('')
-    const selectedFile = ref(null)
-    const isUploading = ref(false)
     const selectedStudent = ref(null)
     const performanceChart = ref(null)
     const sortField = ref('')
@@ -417,55 +408,47 @@ export default {
     const isEditing = ref(false)
     const editingStudent = ref(null)
     const showSearch = ref(false)
+    const teacherSections = ref([])
 
-    // Available years and sections
-    const availableYears = ref(['1st', '2nd', '3rd', '4th'])
-    const availableSections = ref(['South 1', 'South 2', 'South 3'])
-
-    // Add date filter refs
-    const historyStartDate = ref('');
-    const historyEndDate = ref('');
-
-    // Add date picker visibility controls
-    const showStartDatePicker = ref(false);
-    const showEndDatePicker = ref(false);
-
-    // Update the fetchStudents function
-    const fetchStudents = async () => {
+    // Add teacherSections loading function
+    const loadTeacherSections = async () => {
       try {
-        console.log('Fetching students with filters:', {
-          year: selectedYear.value,
-          section: selectedSection.value
-        });
-        
         const token = store.state.auth.token;
-        const response = await axios.get('/api/students', {
+        const response = await axios.get('/api/teacher-class-records/sections', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        teacherSections.value = response.data;
+      } catch (error) {
+        console.error('Failed to load teacher sections:', error);
+        alert('Failed to load sections. Please try refreshing the page.');
+      }
+    };
+
+    const selectSection = async (section) => {
+      try {
+        const token = store.state.auth.token;
+        const response = await axios.get('/api/students/by-section', {
           params: {
-            year: selectedYear.value || undefined,
-            section: selectedSection.value || undefined
+            year: section.year,
+            section: section.section
           },
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        
-        console.log('Fetch response:', response);
         students.value = response.data;
       } catch (error) {
-        console.error('Failed to fetch students:', error.response || error);
-        if (error.response?.status === 401) {
-          store.dispatch('logout');
-          router.push('/login');
-        } else {
-          alert('Failed to load students. Please try refreshing the page.');
-        }
+        console.error('Failed to fetch students:', error);
+        alert('Failed to load students. Please try again.');
       }
     };
 
     // Initialize data on component mount
     onMounted(async () => {
       if (store.getters.isLoggedIn) {
-        await fetchStudents();
+        await loadTeacherSections();
       }
       
       // Initialize all dropdowns
@@ -1053,57 +1036,52 @@ export default {
       }
     };
 
+    const syncStudentRecords = async () => {
+      try {
+        if (!selectedYear.value || !selectedSection.value) {
+          alert('Please select a year and section first');
+          return;
+        }
+    
+        const response = await axios.post(
+          'http://localhost:8000/api/teacher-class-records/sync-records',
+          {
+            year: selectedYear.value,
+            section: selectedSection.value
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${store.state.auth.token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+    
+        if (response.data.success) {
+          await fetchStudents(); // Refresh the student list
+          alert('Student records synchronized successfully!');
+        }
+      } catch (error) {
+        console.error('Failed to sync student records:', error);
+        alert('Failed to sync student records. Please try again.');
+      }
+    };
+
     return {
       students,
-      selectedYear,
-      selectedSection,
+      teacherSections,
       searchQuery,
-      filteredStudents,
-      showAddStudentModal,
-      uploadYear,
-      uploadSection,
-      isUploading,
       selectedStudent,
       performanceChart,
-      selectedFile,
-      handleFileChange,
-      handleFileUpload,
-      viewStudent,
-      closeStudentModal,
+      sortField,
+      sortOrder,
       showDeleteModal,
       studentToDelete,
-      confirmDelete,
-      deleteStudent,
       isEditing,
       editingStudent,
-      startEditing,
-      cancelEditing,
-      saveStudentChanges,
-      sortBy,
-      getSortIcon,
-      sortedStudents,
       showSearch,
-      toggleSearch,
-      handleSearch,
-      editStudent,
-      applyFilters,
-      getAssessmentBadgeClass,
-      getScoreClass,
-      availableYears,
-      availableSections,
-      formatDate,
-      historyStartDate,
-      historyEndDate,
-      filteredAssessments,
-      showStartDatePicker,
-      showEndDatePicker,
-      formatDateForDisplay,
-      clearHistoryDateFilter,
-      clearFilters,
-      clearSearch,
-      isYearCompleted,
-      getYearStatus,
-      getAcademicYearRange,
+      selectSection,
+      // ... rest of return values
     }
   }
 }
@@ -2114,4 +2092,4 @@ export default {
   color: #4299e1;
   font-weight: 500;
 }
-</style> 
+</style>

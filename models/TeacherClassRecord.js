@@ -1,5 +1,51 @@
 const mongoose = require('mongoose');
 
+const attendanceSchema = new mongoose.Schema({
+  date: {
+    type: Date,
+    required: true
+  },
+  status: {
+    type: String,
+    enum: ['present', 'absent', 'late'],
+    required: true
+  },
+  lastModified: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+const studentRecordSchema = new mongoose.Schema({
+  studentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  studentNumber: {
+    type: String,
+    required: true
+  },
+  firstName: {
+    type: String,
+    required: true
+  },
+  lastName: {
+    type: String,
+    required: true
+  },
+  scores: {
+    type: Map,
+    of: Number,
+    default: new Map()
+  },
+  assessments: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Assessment'
+  }],
+  attendance: [attendanceSchema]
+});
+
 const teacherClassRecordSchema = new mongoose.Schema({
   teacherId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -8,8 +54,7 @@ const teacherClassRecordSchema = new mongoose.Schema({
   },
   year: {
     type: String,
-    required: true,
-    enum: ['1st', '2nd', '3rd', '4th']
+    required: true
   },
   section: {
     type: String,
@@ -19,39 +64,19 @@ const teacherClassRecordSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  students: [{
-    studentId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Student',
-      required: true
-    },
-    studentNumber: String,
-    firstName: String,
-    lastName: String,
-    year: String,
-    section: String
-  }],
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  }
+  students: [studentRecordSchema],
+  assessments: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Assessment'
+  }]
+}, {
+  timestamps: true
 });
 
-// Add index for better query performance
-teacherClassRecordSchema.index({ teacherId: 1, year: 1, section: 1, subject: 1 });
+// Create compound index for unique combination
+teacherClassRecordSchema.index(
+  { teacherId: 1, year: 1, section: 1, subject: 1 }, 
+  { unique: true }
+);
 
-// Add error handling for the pre-save middleware
-teacherClassRecordSchema.pre('save', function(next) {
-  try {
-    this.updatedAt = Date.now();
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-module.exports = mongoose.model('TeacherClassRecord', teacherClassRecordSchema); 
+module.exports = mongoose.model('TeacherClassRecord', teacherClassRecordSchema);

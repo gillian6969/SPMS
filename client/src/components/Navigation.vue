@@ -90,7 +90,12 @@
     <div class="content-wrapper">
       <!-- Page Header -->
       <div class="page-header">
-        <h2 class="page-title">{{ pageTitle }}</h2>
+        <div class="d-flex align-items-center">
+          <h2 class="page-title">{{ pageTitle }}</h2>
+          <div v-if="route.name === 'ClassRecords' || route.name === 'Attendance'" class="ms-3 page-subtitle">
+            <span v-if="selectedInfo">of {{ selectedInfo }}</span>
+          </div>
+        </div>
         
         <!-- Profile Dropdown -->
         <div class="dropdown">
@@ -226,7 +231,8 @@ export default {
       isTeacher,
       userInitials,
       isSidebarCollapsed,
-      toggleSidebar
+      toggleSidebar,
+      route
     }
   }
 }
@@ -759,5 +765,11 @@ export default {
   padding: 0.75rem 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   margin-top: auto;
+}
+
+.page-subtitle {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.25rem;
+  font-weight: 400;
 }
 </style> 

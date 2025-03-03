@@ -1,23 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const TeacherClassRecord = require('../models/TeacherClassRecord');
+const User = require('../models/User');
 const auth = require('../middleware/auth');
 const mongoose = require('mongoose');
 const Assessment = require('../models/Assessment');
+const moment = require('moment-timezone');
 
-// Create a new class record
+// Create class record
 router.post('/create', auth, async (req, res) => {
   try {
     const { teacherId, year, section, subject, students } = req.body;
 
     // Validate required fields
     if (!teacherId || !year || !section || !subject || !students) {
-      return res.status(400).json({ 
-        message: 'Missing required fields' 
-      });
+      return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    // Check if a record already exists for this combination
+    // Check for existing record
     const existingRecord = await TeacherClassRecord.findOne({
       teacherId,
       year,
@@ -27,59 +27,53 @@ router.post('/create', auth, async (req, res) => {
 
     if (existingRecord) {
       return res.status(400).json({ 
-        message: 'A class record already exists for this combination' 
+        message: 'A class record already exists for this combination',
+        existingRecord
       });
     }
 
-    // Create new class record with basic student data
+    // Create new class record with initialized empty arrays
     const classRecord = new TeacherClassRecord({
       teacherId,
       year,
       section,
       subject,
-      students
+      students: students.map(student => ({
+        ...student,
+        scores: {},
+        assessments: [],
+        attendance: []
+      })),
+      assessments: []
     });
 
     await classRecord.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Class record created successfully',
-      data: classRecord
-    });
+    res.status(201).json(classRecord);
   } catch (error) {
     console.error('Error creating class record:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message 
-    });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Get teacher's class records
+// Get class records for a teacher
 router.get('/', auth, async (req, res) => {
   try {
     const { teacherId, year, section, subject } = req.query;
     
-    // Log user role and parameters
-    console.log('Accessing class records with parameters:', { teacherId, year, section, subject });
-    console.log('User role:', req.user.role);
-
-    const query = { teacherId };
+    const query = {};
+    if (teacherId) query.teacherId = teacherId;
     if (year) query.year = year;
     if (section) query.section = section;
     if (subject) query.subject = subject;
 
     const records = await TeacherClassRecord.find(query)
-      .sort({ createdAt: -1 });
+      .populate('students.studentId', 'firstName lastName studentNumber')
+      .sort({ year: 1, section: 1, subject: 1 });
 
     res.json(records);
   } catch (error) {
     console.error('Error fetching class records:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message 
-    });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
@@ -214,95 +208,33 @@ router.get('/students-for-attendance', auth, async (req, res) => {
   try {
     const { teacherId, year, section, subject } = req.query;
     
-    console.log('Received request for students with params:', {
-      teacherId,
-      year,
-      section,
-      subject
-    });
-    
     if (!teacherId || !year || !section || !subject) {
-      console.log('Missing required parameters:', {
-        hasTeacherId: !!teacherId,
-        hasYear: !!year,
-        hasSection: !!section,
-        hasSubject: !!subject
-      });
-      return res.status(400).json({ 
-        message: 'TeacherId, year, section, and subject are required',
-        missingFields: {
-          teacherId: !teacherId,
-          year: !year,
-          section: !section,
-          subject: !subject
-        }
-      });
+      return res.status(400).json({ message: 'Missing required parameters' });
     }
-
-    console.log('Looking for class record with query:', {
-      teacherId,
-      year,
-      section,
-      subject
-    });
 
     const classRecord = await TeacherClassRecord.findOne({
       teacherId,
       year,
       section,
       subject
-    }).select('students year section subject');
-
-    console.log('Class record found:', classRecord ? 'Yes' : 'No');
-    if (classRecord) {
-      console.log('Number of students in record:', classRecord.students?.length || 0);
-    }
+    });
 
     if (!classRecord) {
-      return res.status(404).json({ 
-        message: 'Class record not found',
-        query: {
-          teacherId,
-          year,
-          section,
-          subject
-        }
-      });
+      return res.status(404).json({ message: 'Class record not found' });
     }
 
-    // Sort students by lastName then firstName
-    const sortedStudents = [...classRecord.students]
-      .sort((a, b) => {
-        const lastNameComparison = a.lastName.localeCompare(b.lastName);
-        if (lastNameComparison !== 0) return lastNameComparison;
-        return a.firstName.localeCompare(b.firstName);
-      })
-      .map(student => ({
-        studentId: student.studentId,
-        studentNumber: student.studentNumber,
-        firstName: student.firstName,
-        lastName: student.lastName,
-        attendance: student.attendance || [],
-        year: classRecord.year,
-        section: classRecord.section,
-        subject: classRecord.subject
-      }));
+    // Map students to the format expected by the attendance page
+    const students = classRecord.students.map(student => ({
+      studentId: student.studentId || student._id,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      studentNumber: student.studentNumber
+    }));
 
-    console.log('Sending response with sorted students:', sortedStudents.length);
-
-    res.json({
-      students: sortedStudents,
-      year: classRecord.year,
-      section: classRecord.section,
-      subject: classRecord.subject
-    });
+    res.json(students);
   } catch (error) {
     console.error('Error fetching students for attendance:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message,
-      stack: error.stack
-    });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
@@ -311,27 +243,13 @@ router.get('/available-subjects', auth, async (req, res) => {
   try {
     const { teacherId, year, section } = req.query;
     
-    console.log('Received request for subjects with params:', {
-      teacherId,
-      year,
-      section
-    });
-    
     if (!teacherId) {
-      console.log('TeacherId is missing from request');
-      return res.status(400).json({ 
-        message: 'TeacherId is required',
-        success: false
-      });
+      return res.status(400).json({ message: 'TeacherId is required' });
     }
 
     // Validate teacherId format
     if (!mongoose.Types.ObjectId.isValid(teacherId)) {
-      console.log('Invalid teacherId format:', teacherId);
-      return res.status(400).json({
-        message: 'Invalid teacherId format',
-        success: false
-      });
+      return res.status(400).json({ message: 'Invalid teacherId format' });
     }
 
     // Build query
@@ -339,47 +257,20 @@ router.get('/available-subjects', auth, async (req, res) => {
     if (year) query.year = year;
     if (section) query.section = section;
 
-    console.log('Finding records with query:', query);
-
     // Find class records for this teacher with optional year/section filter
     const records = await TeacherClassRecord.find(query);
-    console.log('Found records count:', records.length);
     
     if (!records || records.length === 0) {
-      console.log('No records found for query:', query);
-      return res.json({ 
-        subjects: [],
-        success: true,
-        message: 'No class records found for these criteria'
-      });
+      return res.json({ subjects: [] });
     }
 
     // Get unique subjects from filtered records
     const subjects = [...new Set(records.map(record => record.subject))].filter(Boolean);
-    console.log('Extracted subjects:', subjects);
 
-    // Get student counts per subject for filtered records
-    const subjectCounts = subjects.map(subject => {
-      const recordsWithSubject = records.filter(r => r.subject === subject);
-      const studentCount = recordsWithSubject.reduce((total, record) => total + (record.students?.length || 0), 0);
-      return { subject, studentCount };
-    });
-    console.log('Subject counts:', subjectCounts);
-
-    res.json({ 
-      subjects,
-      subjectCounts,
-      success: true,
-      recordCount: records.length,
-      query
-    });
+    res.json({ subjects });
   } catch (error) {
     console.error('Error fetching available subjects:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message,
-      success: false
-    });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
@@ -458,4 +349,182 @@ router.get('/student/:studentId/performance', auth, async (req, res) => {
   }
 });
 
-module.exports = router; 
+// Update student attendance
+router.put('/:recordId/attendance', auth, async (req, res) => {
+  try {
+    const { recordId } = req.params;
+    const { studentId, date, status } = req.body;
+
+    // Convert date to Philippine timezone
+    const phDate = moment(date).tz('Asia/Manila').format('YYYY-MM-DD');
+
+    const record = await TeacherClassRecord.findById(recordId);
+    if (!record) {
+      return res.status(404).json({ message: 'Class record not found' });
+    }
+
+    const student = record.students.find(s => s.studentId.toString() === studentId);
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found in class record' });
+    }
+
+    // Initialize attendance array if it doesn't exist
+    if (!student.attendance) {
+      student.attendance = [];
+    }
+
+    // Check if attendance for this date already exists
+    const existingAttendanceIndex = student.attendance.findIndex(
+      a => moment(a.date).tz('Asia/Manila').format('YYYY-MM-DD') === phDate
+    );
+
+    if (existingAttendanceIndex !== -1) {
+      // Update existing attendance
+      student.attendance[existingAttendanceIndex].status = status;
+    } else {
+      // Add new attendance record
+      student.attendance.push({
+        date: phDate,
+        status,
+        lastModified: new Date()
+      });
+    }
+
+    await record.save();
+    res.json({ message: 'Attendance updated successfully', student });
+  } catch (error) {
+    console.error('Error updating attendance:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Sync student records
+router.post('/sync-records', auth, async (req, res) => {
+  try {
+    const { year, section } = req.body;
+    const teacherId = req.user._id;
+
+    if (!year || !section) {
+      return res.status(400).json({ message: 'Year and section are required' });
+    }
+
+    // Get all class records for this teacher and section
+    const classRecords = await TeacherClassRecord.find({
+      teacherId,
+      year,
+      section
+    });
+
+    // Get current students in this section
+    const currentStudents = await User.find({
+      role: 'student',
+      year,
+      section
+    }).select('_id studentId firstName lastName year section');
+
+    // Update each class record
+    const updatePromises = classRecords.map(async (record) => {
+      // Remove students who are no longer in the section
+      record.students = record.students.filter(student => 
+        currentStudents.some(cs => cs._id.toString() === student.studentId.toString())
+      );
+
+      // Add new students who aren't in the record
+      const newStudents = currentStudents.filter(cs => 
+        !record.students.some(s => s.studentId.toString() === cs._id.toString())
+      );
+
+      record.students.push(...newStudents.map(student => ({
+        studentId: student._id,
+        studentNumber: student.studentId,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        scores: {},
+        assessments: [],
+        attendance: []
+      })));
+
+      return record.save();
+    });
+
+    await Promise.all(updatePromises);
+
+    res.json({
+      success: true,
+      message: 'Student records synchronized successfully',
+      recordsUpdated: classRecords.length
+    });
+  } catch (error) {
+    console.error('Error syncing student records:', error);
+    res.status(500).json({
+      message: 'Failed to sync student records',
+      error: error.message
+    });
+  }
+});
+
+// Get available years and sections for a specific teacher
+router.get('/available-years-sections', auth, async (req, res) => {
+  try {
+    const { teacherId } = req.query;
+    
+    if (!teacherId) {
+      return res.status(400).json({ message: 'Teacher ID is required' });
+    }
+
+    // Find all class records for this teacher
+    const records = await TeacherClassRecord.find({ teacherId });
+    
+    console.log(`Found ${records.length} class records for teacher ${teacherId}`);
+
+    // Extract unique years and sections
+    let years = [...new Set(records.map(record => record.year))].filter(Boolean).sort();
+    let sections = [...new Set(records.map(record => record.section))].filter(Boolean).sort();
+    let subjects = [...new Set(records.map(record => record.subject))].filter(Boolean).sort();
+
+    // Group sections by year
+    let sectionsByYear = records.reduce((acc, record) => {
+      if (record.year && record.section) {
+        if (!acc[record.year]) {
+          acc[record.year] = new Set();
+        }
+        acc[record.year].add(record.section);
+      }
+      return acc;
+    }, {});
+
+    // Convert Sets to sorted arrays
+    Object.keys(sectionsByYear).forEach(year => {
+      sectionsByYear[year] = [...sectionsByYear[year]].sort();
+    });
+
+    // Group subjects by section
+    let subjectsBySection = records.reduce((acc, record) => {
+      if (record.section && record.subject) {
+        if (!acc[record.section]) {
+          acc[record.section] = new Set();
+        }
+        acc[record.section].add(record.subject);
+      }
+      return acc;
+    }, {});
+
+    // Convert Sets to sorted arrays
+    Object.keys(subjectsBySection).forEach(section => {
+      subjectsBySection[section] = [...subjectsBySection[section]].sort();
+    });
+
+    res.json({ 
+      years, 
+      sections, 
+      subjects,
+      sectionsByYear,
+      subjectsBySection
+    });
+  } catch (error) {
+    console.error('Error fetching available years and sections for teacher:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+module.exports = router;

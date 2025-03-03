@@ -22,9 +22,33 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['citHead', 'teacher', 'ssp'],
+    enum: ['citHead', 'teacher', 'ssp', 'student'],
     required: true,
   },
+  // Student specific fields
+  studentId: {
+    type: String,
+    required: function() {
+      return this.role === 'student';
+    },
+    unique: function() {
+      return this.role === 'student';
+    }
+  },
+  year: {
+    type: String,
+    enum: ['1st', '2nd', '3rd', '4th'],
+    required: function() {
+      return this.role === 'student';
+    }
+  },
+  section: {
+    type: String,
+    required: function() {
+      return this.role === 'student';
+    }
+  },
+  // Teacher specific fields
   teachingYear: {
     type: String,
     enum: ['1st', '2nd', '3rd', '4th'],
@@ -84,4 +108,4 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 const User = mongoose.model('User', userSchema);
 
-module.exports = User; 
+module.exports = User;

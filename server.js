@@ -9,6 +9,7 @@ const userRoutes = require('./routes/users');
 const assessmentRoutes = require('./routes/assessments');
 const dashboardRoutes = require('./routes/dashboard');
 const teacherRoutes = require('./routes/teachers');
+const attendanceRoutes = require('./routes/attendance');
 
 // Load environment variables
 dotenv.config();
@@ -45,6 +46,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/teacher-class-records', teacherClassRecordsRoutes);
 app.use('/api/assessments', assessmentRoutes);
 app.use('/api/teachers', teacherRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

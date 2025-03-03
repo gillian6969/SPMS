@@ -1,74 +1,87 @@
 const express = require('express');
 const router = express.Router();
 const TeacherClassRecord = require('../models/TeacherClassRecord');
+const Attendance = require('../models/Attendance');
 const auth = require('../middleware/auth');
+const moment = require('moment-timezone');
 
 // Create or update attendance
 router.post('/', auth, async (req, res) => {
   try {
-    const { studentId, date, subject, status } = req.body;
+    const { studentId, date, subject, status, section } = req.body;
+    const teacherId = req.user._id;
 
-    // Validate required fields
-    if (!studentId || !date || !subject || !status) {
-      return res.status(400).json({ 
-        message: 'Missing required fields' 
-      });
+    if (!studentId || !date || !subject || !status || !section) {
+      return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    // Find the class record
-    const classRecord = await TeacherClassRecord.findOne({
-      'students.studentId': studentId,
+    // Convert date to Philippine timezone start of day
+    const phDate = moment(date).tz('Asia/Manila').startOf('day').toDate();
+
+    // Find or create attendance record
+    let attendance = await Attendance.findOne({
+      studentId,
+      date: phDate,
       subject
     });
 
-    if (!classRecord) {
-      return res.status(404).json({ 
-        message: 'Class record not found' 
-      });
-    }
-
-    // Find the student in the class record
-    const student = classRecord.students.find(s => s.studentId === studentId);
-    if (!student) {
-      return res.status(404).json({ 
-        message: 'Student not found in class record' 
-      });
-    }
-
-    // Initialize attendance array if it doesn't exist
-    if (!student.attendance) {
-      student.attendance = [];
-    }
-
-    // Check if attendance record already exists for this date and subject
-    const existingAttendanceIndex = student.attendance.findIndex(a => 
-      a.date === date && a.subject === subject
-    );
-
-    if (existingAttendanceIndex !== -1) {
-      // Update existing attendance record
-      student.attendance[existingAttendanceIndex].status = status;
+    if (attendance) {
+      // Update existing record
+      attendance.status = status;
+      attendance.lastModified = moment().tz('Asia/Manila').toDate();
     } else {
-      // Add new attendance record
-      student.attendance.push({
-        date,
+      // Create new record
+      attendance = new Attendance({
+        studentId,
+        teacherId,
+        date: phDate,
         subject,
-        status
+        section,
+        status,
+        lastModified: moment().tz('Asia/Manila').toDate()
       });
     }
 
-    await classRecord.save();
+    await attendance.save();
 
     res.json({
       success: true,
-      message: 'Attendance updated successfully'
+      message: 'Attendance updated successfully',
+      attendance
     });
   } catch (error) {
     console.error('Error updating attendance:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message 
-    });
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get attendance for a specific date
+router.get('/date/:date', auth, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const { section, subject } = req.query;
+
+    console.log('Fetching attendance for date:', date, 'section:', section, 'subject:', subject);
+
+    if (!date || !section || !subject) {
+      return res.status(400).json({ message: 'Date, section, and subject are required' });
+    }
+
+    // Convert date to Philippine timezone start of day
+    const phDate = moment(date).tz('Asia/Manila').startOf('day').toDate();
+
+    const attendanceRecords = await Attendance.find({
+      date: phDate,
+      section,
+      subject
+    }).populate('studentId', 'firstName lastName studentNumber');
+
+    console.log('Attendance records found:', attendanceRecords.length);
+
+    res.json(attendanceRecords);
+  } catch (error) {
+    console.error('Error fetching attendance:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
@@ -76,41 +89,70 @@ router.post('/', auth, async (req, res) => {
 router.get('/:studentId/history', auth, async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { subject } = req.query;
+    const { subject, startDate, endDate } = req.query;
 
-    // Find the class record
-    const classRecord = await TeacherClassRecord.findOne({
-      'students.studentId': studentId,
-      subject
+    const query = { studentId, subject };
+
+    // Add date range filter if provided
+    if (startDate && endDate) {
+      query.date = {
+        $gte: moment(startDate).tz('Asia/Manila').startOf('day').toDate(),
+        $lte: moment(endDate).tz('Asia/Manila').endOf('day').toDate()
+      };
+    }
+
+    const attendanceRecords = await Attendance.find(query)
+      .sort({ date: -1 })
+      .populate('studentId', 'firstName lastName studentNumber')
+      .lean();
+
+    // Calculate attendance statistics
+    const total = attendanceRecords.length;
+    const present = attendanceRecords.filter(r => r.status === 'present').length;
+    const absent = attendanceRecords.filter(r => r.status === 'absent').length;
+    const late = attendanceRecords.filter(r => r.status === 'late').length;
+
+    res.json({
+      records: attendanceRecords,
+      statistics: {
+        total,
+        present,
+        absent,
+        late,
+        presentPercentage: (present / total) * 100 || 0,
+        absentPercentage: (absent / total) * 100 || 0,
+        latePercentage: (late / total) * 100 || 0
+      }
     });
-
-    if (!classRecord) {
-      return res.status(404).json({ 
-        message: 'Class record not found' 
-      });
-    }
-
-    // Find the student in the class record
-    const student = classRecord.students.find(s => s.studentId === studentId);
-    if (!student) {
-      return res.status(404).json({ 
-        message: 'Student not found in class record' 
-      });
-    }
-
-    // Sort attendance records by date (newest first)
-    const sortedAttendance = student.attendance
-      .filter(a => a.subject === subject)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    res.json(sortedAttendance);
   } catch (error) {
     console.error('Error fetching attendance history:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message 
-    });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-module.exports = router; 
+// Get student attendance status for a specific date
+router.get('/status', auth, async (req, res) => {
+  try {
+    const { teacherId, date, section, subject } = req.query;
+
+    if (!teacherId || !date || !section || !subject) {
+      return res.status(400).json({ message: 'All parameters are required' });
+    }
+
+    const phDate = moment(date).tz('Asia/Manila').startOf('day').toDate();
+
+    const attendanceRecords = await Attendance.find({
+      teacherId,
+      date: phDate,
+      section,
+      subject
+    }).populate('studentId', 'firstName lastName studentNumber');
+
+    res.json(attendanceRecords);
+  } catch (error) {
+    console.error('Error fetching attendance status:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+module.exports = router;
