@@ -1,4 +1,12 @@
 <template>
+                    <div class="d-flex gap-2 mb-3">
+          <button 
+            class="btn btn-primary" 
+            @click="showAddStudentModal = true"
+          >
+            <i class="fas fa-plus me-1"></i> Add Student Record
+          </button>
+        </div>
   <div class="student-management">
     <!-- Table Container -->
     <div class="table-container">
@@ -35,6 +43,7 @@
               </ul>
             </div>
 
+
             <!-- Filter Dropdown -->
             <div class="dropdown">
               <button 
@@ -44,11 +53,21 @@
                 data-bs-toggle="dropdown" 
                 aria-expanded="false"
               >
-                <i class="fas fa-filter me-2"></i> View Section
+                <i class="fas fa-filter me-2"></i> 
+                {{ hasActiveFilters ? `${selectedYear || 'All Years'} - ${selectedSection || 'All Sections'}` : 'Filter Section' }}
                 <span v-if="hasActiveFilters" class="filter-badge">!</span>
               </button>
               <div class="dropdown-menu shadow-lg p-3" aria-labelledby="filterDropdown">
-                <h6 class="dropdown-header px-0 mb-2">Available Sections</h6>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="dropdown-header px-0 mb-0">Available Sections</h6>
+                  <button 
+                    v-if="hasActiveFilters"
+                    class="btn btn-sm btn-outline-secondary"
+                    @click="clearFilters"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
                 <div class="mb-3">
                   <div v-if="teacherSections.length === 0" class="text-muted">
                     No sections available
@@ -56,12 +75,12 @@
                   <div v-for="section in teacherSections" :key="section.id" class="mb-2">
                     <button 
                       class="btn btn-outline-primary w-100 text-start"
+                      :class="{ active: selectedYear === section.year && selectedSection === section.section }"
                       @click="selectSection(section)"
                     >
                       {{ section.year }} - {{ section.section }}
                     </button>
                   </div>
-                </div>
                 </div>
               </div>
             </div>
@@ -92,15 +111,7 @@
           </div>
         </div>
 
-        <div class="d-flex gap-2 mb-3">
-          <button 
-            class="btn btn-primary" 
-            @click="syncStudentRecords"
-            :disabled="!selectedYear || !selectedSection"
-          >
-            <i class="fas fa-sync-alt me-1"></i> Sync Student Records
-          </button>
-        </div>
+
 
         <div class="table-responsive">
           <table class="table table-hover">
@@ -147,14 +158,13 @@
     </div>
 
     <!-- Add Student Modal -->
-    <div v-if="showAddStudentModal" class="modal-wrapper">
-      <div class="modal-backdrop" @click="showAddStudentModal = false"></div>
-      <div class="modal">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showAddStudentModal" class="add-student-modal">
+      <div class="add-student-backdrop" @click="showAddStudentModal = false"></div>
+      <div class="add-student-dialog">
+        <div class="add-student-content">
+          <div class="modal-header bg-primary text-white">
             <h5 class="modal-title">Add Student List</h5>
-            <button type="button" class="btn-close" @click="showAddStudentModal = false"></button>
+            <button type="button" class="btn-close btn-close-white" @click="showAddStudentModal = false"></button>
           </div>
           <div class="modal-body">
             <form @submit.prevent="handleFileUpload">
@@ -163,7 +173,7 @@
                 <label class="form-label">Year Level</label>
                 <select class="form-select" v-model="uploadYear" required>
                   <option value="">Select Year</option>
-                  <option v-for="year in availableYears" :value="year">{{ year }}</option>
+                  <option v-for="year in availableYears" :key="year" :value="year">{{ year }}</option>
                 </select>
                 <small class="text-muted d-block mt-1">
                   Note: Sections will be automatically assigned based on the number of students (50 students per section).
@@ -197,7 +207,6 @@
                 </button>
               </div>
             </form>
-            </div>
           </div>
         </div>
       </div>
@@ -409,30 +418,46 @@ export default {
     const editingStudent = ref(null)
     const showSearch = ref(false)
     const teacherSections = ref([])
+    const selectedYear = ref('')
+    const selectedSection = ref('')
+    const selectedFile = ref(null)
+    const uploadYear = ref('')
+    const isUploading = ref(false)
+    const subjectChart = ref(null)
+    const attendanceChart = ref(null)
+    const historyStartDate = ref('')
+    const historyEndDate = ref('')
+    const showStartDatePicker = ref(false)
+    const showEndDatePicker = ref(false)
+    const showAddStudentModal = ref(false)
+    const availableYears = ['1st', '2nd', '3rd', '4th']
 
     // Add teacherSections loading function
     const loadTeacherSections = async () => {
       try {
         const token = store.state.auth.token;
-        const response = await axios.get('/api/teacher-class-records/sections', {
+        const response = await axios.get('/api/department/sections', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
         teacherSections.value = response.data;
       } catch (error) {
-        console.error('Failed to load teacher sections:', error);
-        alert('Failed to load sections. Please try refreshing the page.');
+        console.error('Failed to load sections:', error);
+        teacherSections.value = []; // Set empty array on error
       }
     };
 
     const selectSection = async (section) => {
+      selectedYear.value = section.year;
+      selectedSection.value = section.section;
+      
       try {
         const token = store.state.auth.token;
         const response = await axios.get('/api/students/by-section', {
           params: {
-            year: section.year,
-            section: section.section
+            year: selectedYear.value,
+            section: selectedSection.value
           },
           headers: {
             'Authorization': `Bearer ${token}`
@@ -445,10 +470,27 @@ export default {
       }
     };
 
+    // Add fetchStudents function
+    const fetchStudents = async () => {
+      try {
+        const token = store.state.auth.token;
+        const response = await axios.get('/api/students', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        students.value = response.data;
+      } catch (error) {
+        console.error('Failed to fetch students:', error);
+        alert('Failed to fetch students. Please try again.');
+      }
+    };
+
     // Initialize data on component mount
     onMounted(async () => {
       if (store.getters.isLoggedIn) {
         await loadTeacherSections();
+        await fetchStudents();
       }
       
       // Initialize all dropdowns
@@ -535,170 +577,20 @@ export default {
       }
     }
 
-    // Update viewStudent function to use createdAt
-    const viewStudent = async (student) => {
-      try {
-        selectedStudent.value = student;
-        
-        // Clear existing charts
-        if (subjectChart.value) {
-          const existingChart = Chart.getChart(subjectChart.value);
-          if (existingChart) {
-            existingChart.destroy();
-          }
-        }
-        if (attendanceChart.value) {
-          const existingChart = Chart.getChart(attendanceChart.value);
-          if (existingChart) {
-            existingChart.destroy();
-          }
-        }
-
-        const token = store.state.auth.token;
-        // Adjust dates for Philippine timezone when sending to API
-        let apiStartDate = historyStartDate.value ? new Date(historyStartDate.value) : undefined;
-        let apiEndDate = historyEndDate.value ? new Date(historyEndDate.value) : undefined;
-        
-        if (apiStartDate) {
-          apiStartDate.setUTCHours(0, 0, 0, 0);
-          apiStartDate.setHours(apiStartDate.getHours() + 8); // Adjust for Philippine timezone
-        }
-        if (apiEndDate) {
-          apiEndDate.setUTCHours(23, 59, 59, 999);
-          apiEndDate.setHours(apiEndDate.getHours() + 8); // Adjust for Philippine timezone
-        }
-
-        const response = await axios.get('/api/teacher-class-records/student/' + student._id + '/performance', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          params: {
-            startDate: apiStartDate?.toISOString() || undefined,
-            endDate: apiEndDate?.toISOString() || undefined
-          }
-        });
-        
-        const performanceData = response.data;
-
-        // Sort assessments by createdAt
-        if (performanceData.assessments) {
-          performanceData.assessments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-          selectedStudent.value.assessments = performanceData.assessments;
-        }
-
-        // Create subject performance chart using filtered data
-        const filteredData = filteredAssessments.value;
-        const quizAvg = calculateTypeAverage(filteredData, 'Quiz');
-        const activityAvg = calculateTypeAverage(filteredData, 'Activity');
-        const performanceTaskAvg = calculateTypeAverage(filteredData, 'Performance Task');
-
-        new Chart(subjectChart.value, {
-          type: 'bar',
-          data: {
-            labels: ['Quizzes', 'Activities', 'Performance Tasks'],
-            datasets: [{
-              label: 'Average Score (%)',
-              data: [quizAvg, activityAvg, performanceTaskAvg],
-              backgroundColor: [
-                'rgba(0, 51, 102, 0.7)',
-                'rgba(0, 51, 102, 0.5)',
-                'rgba(0, 51, 102, 0.3)'
-              ]
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              y: {
-                beginAtZero: true,
-                max: 100,
-                title: {
-                  display: true,
-                  text: 'Average Score (%)'
-                }
-              }
-            },
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top'
-              },
-              title: {
-                display: true,
-                text: 'Subject Performance Summary',
-                font: {
-                  size: 16
-                }
-              }
-            }
-          }
-        });
-
-        // Create attendance chart
-        new Chart(attendanceChart.value, {
-          type: 'doughnut',
-          data: {
-            labels: ['Present', 'Absent', 'Late'],
-            datasets: [{
-              data: [
-                performanceData.attendanceData?.present || 0,
-                performanceData.attendanceData?.absent || 0,
-                performanceData.attendanceData?.late || 0
-              ],
-              backgroundColor: [
-                'rgba(28, 200, 138, 0.8)',
-                'rgba(231, 74, 59, 0.8)',
-                'rgba(246, 194, 62, 0.8)'
-              ]
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              legend: {
-                position: 'bottom'
-              },
-              title: {
-                display: true,
-                text: 'Attendance Distribution',
-                font: {
-                  size: 16
-                }
-              }
-            }
-          }
-        });
-      } catch (error) {
-        console.error('Failed to fetch student performance:', error);
-        selectedStudent.value = student;
-      }
-    };
-
-    // Update formatDate function to handle createdAt
-    const formatDate = (dateString) => {
-      if (!dateString) return 'N/A';
-      const date = new Date(dateString);
-      // Adjust for Philippine timezone (UTC+8)
-      date.setHours(date.getHours() + 8);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Manila'
-      });
-    };
-
     // Filter students
     const filteredStudents = computed(() => {
       return students.value.filter(student => {
         const searchLower = searchQuery.value.toLowerCase();
-        return (
+        const matchesSearch = 
           student.studentId.toLowerCase().includes(searchLower) ||
           student.firstName.toLowerCase().includes(searchLower) ||
-          student.lastName.toLowerCase().includes(searchLower)
-        );
+          student.lastName.toLowerCase().includes(searchLower);
+
+        // Apply year and section filters
+        const matchesYear = !selectedYear.value || student.year === selectedYear.value;
+        const matchesSection = !selectedSection.value || student.section === selectedSection.value;
+
+        return matchesSearch && matchesYear && matchesSection;
       });
     });
 
@@ -714,9 +606,8 @@ export default {
     };
 
     const confirmDelete = (student) => {
-      if (confirm('Are you sure you want to delete this student? This will remove them from all teacher class records as well.')) {
-        deleteStudent(student)
-      }
+      studentToDelete.value = student;
+      showDeleteModal.value = true;
     }
 
     const deleteStudent = async (student) => {
@@ -733,17 +624,17 @@ export default {
           }
         );
 
-          // Then delete the student from students collection using MongoDB _id
+        // Then delete the student from students collection using MongoDB _id
         await axios.delete(
           '/api/students/' + student._id,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
             }
+          }
         );
 
-            // Update local state
+        // Update local state
         students.value = students.value.filter(s => s._id !== student._id);
         selectedStudent.value = null;
         showDeleteModal.value = false;
@@ -756,11 +647,12 @@ export default {
     }
 
     const startEditing = () => {
+      editingStudent.value = { ...selectedStudent.value }
       isEditing.value = true
     }
 
     const cancelEditing = () => {
-      editingStudent.value = { ...selectedStudent.value }
+      editingStudent.value = null
       isEditing.value = false
     }
 
@@ -770,32 +662,32 @@ export default {
         
         // First, update student information
         const studentResponse = await axios.put('/api/students/' + editingStudent.value._id, {
-            studentId: editingStudent.value.studentId,
-            firstName: editingStudent.value.firstName,
-            lastName: editingStudent.value.lastName,
-            email: editingStudent.value.email,
-            year: editingStudent.value.year,
-            section: editingStudent.value.section
+          studentId: editingStudent.value.studentId,
+          firstName: editingStudent.value.firstName,
+          lastName: editingStudent.value.lastName,
+          email: editingStudent.value.email,
+          year: editingStudent.value.year,
+          section: editingStudent.value.section
         }, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         })
 
         if (studentResponse.data) {
           // Then update all teacher class records containing this student
           const teacherUpdateResponse = await axios.put('/api/teacher-class-records/update-all-records', {
-              oldStudentNumber: selectedStudent.value.studentId,  // Original student number
-              newStudentNumber: editingStudent.value.studentId,   // New student number
-              firstName: editingStudent.value.firstName,
-              lastName: editingStudent.value.lastName,
-              year: editingStudent.value.year,
-              section: editingStudent.value.section,
-              studentId: editingStudent.value._id  // Include MongoDB ObjectId reference
+            oldStudentNumber: selectedStudent.value.studentId,  // Original student number
+            newStudentNumber: editingStudent.value.studentId,   // New student number
+            firstName: editingStudent.value.firstName,
+            lastName: editingStudent.value.lastName,
+            year: editingStudent.value.year,
+            section: editingStudent.value.section,
+            studentId: editingStudent.value._id  // Include MongoDB ObjectId reference
           }, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
           })
 
           if (teacherUpdateResponse.data.success) {
@@ -868,203 +760,57 @@ export default {
       console.log('Searching for:', searchQuery.value)
     }
 
-    const editStudent = (student) => {
-      selectedStudent.value = student
-      editingStudent.value = { ...student }
-      isEditing.value = true
-    }
-
-    const applyFilters = () => {
-      fetchStudents()
-    }
-
-    // Watch for filter changes
-    watch([selectedYear, selectedSection], () => {
-      fetchStudents()
-    })
-
-    // Add these new methods in the setup function
-    const getAssessmentBadgeClass = (type) => {
-      switch (type) {
-        case 'Quiz': return 'badge-quiz'
-        case 'Activity': return 'badge-activity'
-        case 'Performance Task': return 'badge-performance'
-        default: return ''
-      }
-    }
-
-    const getScoreClass = (percentage) => {
-      if (percentage >= 90) return 'score-excellent'
-      if (percentage >= 80) return 'score-good'
-      if (percentage >= 70) return 'score-average'
-      return 'score-poor'
-    }
-
-    // Update filteredAssessments computed property to use createdAt
-    const filteredAssessments = computed(() => {
-      if (!selectedStudent.value?.assessments) return [];
-
-      return selectedStudent.value.assessments.filter(assessment => {
-        const assessmentDate = new Date(assessment.createdAt);
-        let passesDateFilter = true;
-
-        if (historyStartDate.value && historyEndDate.value) {
-          const startDate = new Date(historyStartDate.value);
-          startDate.setUTCHours(0, 0, 0, 0);
-          startDate.setHours(startDate.getHours() + 8); // Adjust for Philippine timezone
-          
-          const endDate = new Date(historyEndDate.value);
-          endDate.setUTCHours(23, 59, 59, 999);
-          endDate.setHours(endDate.getHours() + 8); // Adjust for Philippine timezone
-          
-          passesDateFilter = assessmentDate >= startDate && assessmentDate <= endDate;
-        }
-
-        return passesDateFilter;
-      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by createdAt
-    });
-
-    // Update formatDateForDisplay to use Philippine timezone
-    const formatDateForDisplay = (dateString) => {
-      if (!dateString) return '';
-      const date = new Date(dateString);
-      // Adjust for Philippine timezone
-      date.setHours(date.getHours() + 8);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        timeZone: 'Asia/Manila'
-      });
-    };
-
-    // Add click outside handler to close date pickers
-    const handleClickOutside = (event) => {
-      const startPickerContainer = document.querySelector('.date-input-container:first-child');
-      const endPickerContainer = document.querySelector('.date-input-container:last-child');
-      
-      if (startPickerContainer && !startPickerContainer.contains(event.target)) {
-        showStartDatePicker.value = false;
-      }
-      
-      if (endPickerContainer && !endPickerContainer.contains(event.target)) {
-        showEndDatePicker.value = false;
-      }
-    };
-
-    // Add event listener for click outside
-    onMounted(() => {
-      document.addEventListener('click', handleClickOutside);
-    });
-
-    onUnmounted(() => {
-      document.removeEventListener('click', handleClickOutside);
-    });
-
-    // Update clear filter function
-    const clearHistoryDateFilter = () => {
-      historyStartDate.value = '';
-      historyEndDate.value = '';
-      showStartDatePicker.value = false;
-      showEndDatePicker.value = false;
-    };
-
-    // Add watcher for date filter changes
-    watch([historyStartDate, historyEndDate], async () => {
-      if (selectedStudent.value) {
-        await viewStudent(selectedStudent.value);
-      }
-    });
-
-    // Add helper function to calculate averages for filtered data
-    const calculateTypeAverage = (assessments, type) => {
-      const typeAssessments = assessments.filter(a => a.type === type);
-      if (typeAssessments.length === 0) return 0;
-      
-      const sum = typeAssessments.reduce((acc, curr) => {
-        return acc + (curr.score / curr.maxScore * 100);
-      }, 0);
-      
-      return Number((sum / typeAssessments.length).toFixed(2));
-    };
-
-    const clearFilters = () => {
-      selectedYear.value = ''
-      selectedSection.value = ''
-      applyFilters()
-    }
-
     const clearSearch = () => {
       searchQuery.value = ''
       handleSearch()
     }
 
-    // Add these methods to the setup function
-    const isYearCompleted = (year) => {
-      if (!selectedStudent.value) return false;
-      const yearOrder = { '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
-      const studentYearNum = yearOrder[selectedStudent.value.year];
-      return yearOrder[year] < studentYearNum;
-    };
-
-    const getYearStatus = (year) => {
-      if (!selectedStudent.value) return 'Not Started';
-      const yearOrder = { '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
-      const studentYearNum = yearOrder[selectedStudent.value.year];
-      
-      if (yearOrder[year] < studentYearNum) {
-        return 'Completed';
-      } else if (yearOrder[year] === studentYearNum) {
-        return 'Current';
-      } else {
-        return 'Not Started';
-      }
-    };
-
+    // Add getAcademicYearRange function
     const getAcademicYearRange = (year) => {
-      switch (year) {
+      const currentYear = new Date().getFullYear()
+      let yearNumber = 0
+      
+      switch(year) {
         case '1st':
-          return '2024 - 2028';
+          yearNumber = 1
+          break
         case '2nd':
-          return '2023 - 2027';
+          yearNumber = 2
+          break
         case '3rd':
-          return '2022 - 2026';
+          yearNumber = 3
+          break
         case '4th':
-          return '2021 - 2025';
+          yearNumber = 4
+          break
         default:
-          return 'N/A';
+          return 'N/A'
+      }
+      
+      const startYear = currentYear - yearNumber + 1
+      return `${startYear} - ${startYear + 1}`
+    }
+
+    // Add hasActiveFilters computed property
+    const hasActiveFilters = computed(() => {
+      return selectedYear.value || selectedSection.value;
+    });
+
+    // Add viewStudent function
+    const viewStudent = (student) => {
+      selectedStudent.value = student;
+      // Initialize charts if needed
+      if (performanceChart.value) {
+        const ctx = performanceChart.value.getContext('2d');
+        // Add your chart initialization logic here
       }
     };
 
-    const syncStudentRecords = async () => {
-      try {
-        if (!selectedYear.value || !selectedSection.value) {
-          alert('Please select a year and section first');
-          return;
-        }
-    
-        const response = await axios.post(
-          'http://localhost:8000/api/teacher-class-records/sync-records',
-          {
-            year: selectedYear.value,
-            section: selectedSection.value
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${store.state.auth.token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-    
-        if (response.data.success) {
-          await fetchStudents(); // Refresh the student list
-          alert('Student records synchronized successfully!');
-        }
-      } catch (error) {
-        console.error('Failed to sync student records:', error);
-        alert('Failed to sync student records. Please try again.');
-      }
+    // Add clearFilters function
+    const clearFilters = () => {
+      selectedYear.value = '';
+      selectedSection.value = '';
+      searchQuery.value = '';
     };
 
     return {
@@ -1081,7 +827,33 @@ export default {
       editingStudent,
       showSearch,
       selectSection,
-      // ... rest of return values
+      showAddStudentModal,
+      selectedFile,
+      uploadYear,
+      isUploading,
+      availableYears,
+      handleFileChange,
+      handleFileUpload,
+      filteredStudents,
+      closeStudentModal,
+      confirmDelete,
+      deleteStudent,
+      startEditing,
+      cancelEditing,
+      saveStudentChanges,
+      sortBy,
+      getSortIcon,
+      sortedStudents,
+      toggleSearch,
+      handleSearch,
+      clearSearch,
+      fetchStudents,
+      hasActiveFilters,
+      selectedYear,
+      selectedSection,
+      viewStudent,
+      getAcademicYearRange,
+      clearFilters
     }
   }
 }
@@ -1100,6 +872,15 @@ export default {
 
 .student-management {
   padding: 20px;
+  position: relative;
+}
+
+/* Button container styles */
+.d-flex.gap-2.mb-3 {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
 }
 
 /* Modal Styles */
@@ -1112,64 +893,118 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
-  overflow-y: auto;
-  padding: 2rem 1rem;
+  z-index: 2000;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1999;
 }
 
 .modal {
   position: relative;
   width: 100%;
-  max-height: calc(100vh - 4rem);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.modal-dialog {
-  position: relative;
-  width: 100%;
-  pointer-events: auto;
-  margin: 0 auto;
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
+  max-width: 500px;
+  margin: 2rem;
+  z-index: 2001;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
 }
 
 .modal-content {
   position: relative;
-  display: flex;
-  flex-direction: column;
   width: 100%;
-  background-color: #fff;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-  z-index: 10001;
-  max-height: calc(100vh - 4rem);
+  background: white;
+  border-radius: 12px;
   overflow: hidden;
 }
 
 .modal-header {
-  background: #003366;
-  color: white;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.modal-header .modal-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0;
+.modal-header.bg-primary {
+  background-color: #003366 !important;
+}
+
+.btn-close-white {
+  filter: brightness(0) invert(1);
 }
 
 .modal-body {
-  position: relative;
-  flex: 1 1 auto;
   padding: 1.5rem;
-  overflow-y: auto;
-  max-height: calc(100vh - 10rem);
+}
+
+.form-label {
+  font-weight: 500;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+}
+
+.form-select,
+.form-control {
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+.form-select:focus,
+.form-control:focus {
+  border-color: #003366;
+  box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.1);
+}
+
+.text-muted {
+  color: #718096 !important;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: #003366;
+  border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #004080;
+}
+
+.btn-secondary {
+  background-color: #e2e8f0;
+  border: none;
+  color: #4a5568;
+}
+
+.btn-secondary:hover {
+  background-color: #cbd5e1;
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Table container styles */
+.table-container {
+  margin-top: 0;
 }
 
 /* Table Styles */
@@ -1804,6 +1639,8 @@ export default {
   display: grid;
   grid-template-columns: 350px 1fr;
   gap: 2rem;
+  max-height: calc(90vh - 4rem);
+  overflow-y: auto;
 }
 
 .student-info {
@@ -1889,15 +1726,17 @@ export default {
 }
 
 .modal-dialog.modal-xxl {
-  max-width: 1400px;
-  width: 95%;
-  margin: 1rem auto;
+  max-width: 90%;
+  width: 1400px;
+  margin: 2rem auto;
 }
 
 .student-details {
   display: grid;
-  grid-template-columns: 400px 1fr;
+  grid-template-columns: 350px 1fr;
   gap: 2rem;
+  max-height: calc(90vh - 4rem);
+  overflow-y: auto;
 }
 
 .student-info {
@@ -2091,5 +1930,122 @@ export default {
 .timeline-item.current .timeline-status {
   color: #4299e1;
   font-weight: 500;
+}
+
+/* Add Student Modal Styles */
+.add-student-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.add-student-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+}
+
+.add-student-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  margin: 1.75rem;
+  z-index: 10000;
+}
+
+.add-student-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+}
+
+.modal-header.bg-primary {
+  background-color: #003366 !important;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.btn-close-white {
+  filter: brightness(0) invert(1);
+}
+
+/* Form Styles */
+.form-label {
+  font-weight: 500;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+}
+
+.form-select,
+.form-control {
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+.form-select:focus,
+.form-control:focus {
+  border-color: #003366;
+  box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.1);
+}
+
+.text-muted {
+  color: #718096 !important;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: #003366;
+  border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #004080;
+}
+
+.btn-secondary {
+  background-color: #e2e8f0;
+  border: none;
+  color: #4a5568;
+}
+
+.btn-secondary:hover {
+  background-color: #cbd5e1;
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 </style>
