@@ -8,7 +8,7 @@ const moment = require('moment-timezone');
 // Create or update attendance
 router.post('/', auth, async (req, res) => {
   try {
-    const { studentId, date, subject, status, section } = req.body;
+    const { studentId, date, subject, status, section, createdAt } = req.body;
     const teacherId = req.user._id;
 
     if (!studentId || !date || !subject || !status || !section) {
@@ -28,7 +28,13 @@ router.post('/', auth, async (req, res) => {
     if (attendance) {
       // Update existing record
       attendance.status = status;
-      attendance.lastModified = moment().tz('Asia/Manila').toDate();
+      
+      // Use provided createdAt or current time
+      if (createdAt) {
+        attendance.lastModified = new Date(createdAt);
+      } else {
+        attendance.lastModified = moment().tz('Asia/Manila').toDate();
+      }
     } else {
       // Create new record
       attendance = new Attendance({
@@ -38,7 +44,7 @@ router.post('/', auth, async (req, res) => {
         subject,
         section,
         status,
-        lastModified: moment().tz('Asia/Manila').toDate()
+        lastModified: createdAt ? new Date(createdAt) : moment().tz('Asia/Manila').toDate()
       });
     }
 
@@ -51,7 +57,7 @@ router.post('/', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating attendance:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -59,29 +65,47 @@ router.post('/', auth, async (req, res) => {
 router.get('/date/:date', auth, async (req, res) => {
   try {
     const { date } = req.params;
-    const { section, subject } = req.query;
+    const { section, subject, teacherId } = req.query;
 
-    console.log('Fetching attendance for date:', date, 'section:', section, 'subject:', subject);
+    console.log('Fetching attendance for date:', date, 'section:', section, 'subject:', subject, 'teacherId:', teacherId);
 
-    if (!date || !section || !subject) {
-      return res.status(400).json({ message: 'Date, section, and subject are required' });
+    if (!date) {
+      return res.status(400).json({ message: 'Date is required' });
     }
 
+    // Build query
+    const query = {};
+    
     // Convert date to Philippine timezone start of day
     const phDate = moment(date).tz('Asia/Manila').startOf('day').toDate();
+    query.date = phDate;
+    
+    // Add optional filters
+    if (section) query.section = section;
+    if (subject) query.subject = subject;
+    if (teacherId) query.teacherId = teacherId;
 
-    const attendanceRecords = await Attendance.find({
-      date: phDate,
-      section,
-      subject
-    }).populate('studentId', 'firstName lastName studentNumber');
+    console.log('Attendance query:', query);
+
+    const attendanceRecords = await Attendance.find(query)
+      .populate('studentId', 'firstName lastName studentNumber')
+      .sort({ lastModified: -1 }); // Sort by lastModified in descending order
 
     console.log('Attendance records found:', attendanceRecords.length);
 
-    res.json(attendanceRecords);
+    // Map the records to include createdAt for the frontend
+    const mappedRecords = attendanceRecords.map(record => {
+      const recordObj = record.toObject();
+      return {
+        ...recordObj,
+        createdAt: record.lastModified || record.createdAt || record.updatedAt
+      };
+    });
+
+    res.json(mappedRecords);
   } catch (error) {
     console.error('Error fetching attendance:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

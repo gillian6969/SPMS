@@ -143,4 +143,91 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
+// Direct score update endpoint
+router.post('/update-score-direct', auth, async (req, res) => {
+  try {
+    const { assessmentId, teacherId, studentNumber, score } = req.body;
+    
+    console.log('Direct score update request received:', {
+      assessmentId,
+      teacherId,
+      studentNumber,
+      score
+    });
+    
+    // Validate required fields
+    if (!assessmentId || !teacherId || !studentNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Assessment ID, teacher ID, and student number are required'
+      });
+    }
+    
+    // Find the assessment
+    const assessment = await Assessment.findOne({
+      _id: assessmentId,
+      teacherId
+    });
+    
+    if (!assessment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assessment not found'
+      });
+    }
+    
+    console.log('Found assessment:', {
+      id: assessment._id,
+      type: assessment.type,
+      number: assessment.number
+    });
+    
+    // Initialize scores Map if it doesn't exist
+    if (!assessment.scores) {
+      assessment.scores = new Map();
+    }
+    
+    // Update the score
+    if (score === null) {
+      // Remove the score
+      assessment.scores.delete(studentNumber);
+      console.log(`Removed score for student ${studentNumber}`);
+    } else {
+      // Set the score
+      assessment.scores.set(studentNumber, score);
+      console.log(`Set score for student ${studentNumber} to ${score}`);
+    }
+    
+    // Save the assessment
+    await assessment.save();
+    console.log('Assessment saved successfully');
+    
+    // Convert Map to plain object for response
+    const plainScores = {};
+    assessment.scores.forEach((value, key) => {
+      plainScores[key] = value;
+    });
+    
+    // Return success response
+    res.json({
+      success: true,
+      message: 'Score updated successfully',
+      assessment: {
+        _id: assessment._id,
+        type: assessment.type,
+        number: assessment.number,
+        maxScore: assessment.maxScore,
+        scores: plainScores
+      }
+    });
+  } catch (error) {
+    console.error('Error updating score:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 

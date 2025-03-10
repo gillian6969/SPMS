@@ -1,48 +1,16 @@
 <template>
   <div class="attendance-view">
-    <!-- Title -->
-    <div class="top-nav-title mb-4" v-if="selectedYear && selectedSection && selectedSubject">
-      <h4 class="mb-0">
-        Attendance Record of {{ selectedYear }} - {{ selectedSection }} | {{ selectedSubject }}
-      </h4>
-    </div>
-    
-    <!-- Controls -->
+    <!-- Control Buttons and Date Navigation -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <!-- Filter Controls -->
       <div class="d-flex gap-2">
-        <div class="dropdown">
-          <button class="btn btn-control" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="fas fa-filter me-2"></i> Filter
+        <!-- Any attendance-specific buttons can go here -->
+        <button 
+          class="btn btn-outline-secondary" 
+          @click="refreshAttendance"
+          title="Refresh attendance data from database"
+        >
+          <i class="fas fa-sync-alt me-2"></i> Refresh Attendance
           </button>
-          <div class="dropdown-menu control-menu p-3" style="width: 280px">
-            <h6 class="dropdown-header mb-2">Filter Options</h6>
-            <div class="mb-3">
-              <label class="form-label">Year Level</label>
-              <select class="form-select form-select-sm" v-model="selectedYear" @change="applyFilters">
-                <option value="">Select Year</option>
-                <option v-for="year in availableYears" :key="year" :value="year">{{ year }}</option>
-              </select>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Section</label>
-              <select class="form-select form-select-sm" v-model="selectedSection" :disabled="!selectedYear" @change="applyFilters">
-                <option value="">Select Section</option>
-                <option v-for="section in filteredSections" :key="section" :value="section">{{ section }}</option>
-              </select>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Subject</label>
-              <select class="form-select form-select-sm" v-model="selectedSubject" :disabled="!selectedSection" @change="applyFilters">
-                <option value="">Select Subject</option>
-                <option v-for="subject in teacherSubjects" :key="subject" :value="subject">{{ subject }}</option>
-              </select>
-            </div>
-            <div class="d-flex justify-content-end">
-              <button class="btn btn-sm btn-secondary" @click="clearFilters">Clear Filters</button>
-            </div>
-          </div>
-        </div>
       </div>
       
       <!-- Date Navigation -->
@@ -60,48 +28,6 @@
         >
           <i class="fas fa-chevron-right"></i>
         </button>
-        <button 
-          class="btn btn-outline-secondary" 
-          @click="refreshAttendance"
-          title="Refresh attendance data from database"
-        >
-          <i class="fas fa-sync-alt"></i>
-        </button>
-      </div>
-    </div>
-
-    <!-- Calendar Popup -->
-    <div class="calendar-popup" v-if="showCalendarPopup" @click.self="showCalendarPopup = false">
-      <div class="calendar-container">
-        <div class="calendar-header">
-          <h6 class="mb-0">Select Date</h6>
-          <button type="button" class="btn-close" @click="showCalendarPopup = false"></button>
-        </div>
-        <div class="calendar-body">
-          <div class="input-group">
-            <span class="input-group-text"><i class="fas fa-calendar-day"></i></span>
-        <input 
-          type="date" 
-          class="form-control" 
-              :value="formatDateForInput(currentDate)"
-              :max="formatDateForInput(new Date())"
-              @change="setCurrentDate($event.target.value); showCalendarPopup = false"
-            >
-          </div>
-          
-          <!-- Quick Date Buttons -->
-          <div class="quick-date-buttons mt-3">
-            <button class="btn btn-sm btn-outline-secondary" @click="navigateDate(-7); showCalendarPopup = false">
-              <i class="fas fa-angle-double-left me-1"></i> Last Week
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" @click="navigateDate(-1); showCalendarPopup = false">
-              <i class="fas fa-angle-left me-1"></i> Yesterday
-            </button>
-            <button class="btn btn-sm btn-primary" @click="setCurrentDate(formatDateForInput(new Date())); showCalendarPopup = false">
-              Today
-        </button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -109,42 +35,92 @@
     <div class="card">
       <div class="card-body">
         <!-- Table Controls -->
-        <div class="table-controls mb-4">
+        <div class="table-controls mb-4" style="z-index: 10000 !important; position: relative;">
           <div class="d-flex gap-3 align-items-center">
-            <!-- Sort Dropdown -->
-            <div class="dropdown">
-              <button class="btn btn-control" type="button" data-bs-toggle="dropdown">
-                <i class="fas fa-sort me-2"></i> Sort by
-              </button>
-              <ul class="dropdown-menu control-menu">
-                <li>
-                  <a class="dropdown-item" href="#" @click="sortBy('studentNumber')">
-                    Student Number
-                    <i :class="getSortIcon('studentNumber')" class="ms-auto"></i>
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="#" @click="sortBy('lastName')">
-                    Name
-                    <i :class="getSortIcon('lastName')" class="ms-auto"></i>
-                  </a>
-                </li>
-              </ul>
+            <div class="d-flex gap-3" style="z-index: 10000 !important; position: relative;">
+              <!-- Sort Dropdown -->
+              <div class="dropdown" style="z-index: 10000 !important; position: relative;">
+                <button class="btn btn-control" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="fas fa-sort me-2"></i> Sort by
+                </button>
+                <ul class="dropdown-menu control-menu" style="z-index: 10000 !important; position: absolute !important;">
+                  <li>
+                    <a class="dropdown-item d-flex align-items-center" href="#" @click="sortBy('studentNumber')">
+                      <i class="fas fa-sort-numeric-down me-2"></i> Student Number
+                      <i :class="getSortIcon('studentNumber')" class="ms-auto"></i>
+                    </a>
+                  </li>
+                  <li>
+                    <a class="dropdown-item d-flex align-items-center" href="#" @click="sortBy('lastName')">
+                      <i class="fas fa-sort-alpha-down me-2"></i> Name
+                      <i :class="getSortIcon('lastName')" class="ms-auto"></i>
+                    </a>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Filter Dropdown -->
+              <div class="dropdown" style="z-index: 10000 !important; position: relative;">
+                <button class="btn btn-control" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="fas fa-filter me-2"></i> Filter
+                  <span v-if="selectedYear || selectedSection || selectedSubject" class="filter-badge">!</span>
+                </button>
+                <div class="dropdown-menu control-menu p-3" style="width: 280px; z-index: 10000 !important; position: absolute !important;">
+                  <h6 class="dropdown-header mb-2">Filter Options</h6>
+                  <div class="mb-3">
+                    <label class="form-label">Year Level</label>
+                    <select class="form-select form-select-sm" v-model="selectedYear" @change="applyFilters">
+                      <option value="">Select Year</option>
+                      <option v-for="year in availableYears" :key="year" :value="year">{{ year }}</option>
+                    </select>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Section</label>
+                    <select class="form-select form-select-sm" v-model="selectedSection" :disabled="!selectedYear" @change="applyFilters">
+                      <option value="">Select Section</option>
+                      <option v-for="section in filteredSections" :key="section" :value="section">{{ section }}</option>
+                    </select>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Subject</label>
+                    <select class="form-select form-select-sm" v-model="selectedSubject" :disabled="!selectedSection" @change="applyFilters">
+                      <option value="">Select Subject</option>
+                      <option v-for="subject in teacherSubjects" :key="subject" :value="subject">{{ subject }}</option>
+                    </select>
+                  </div>
+                  <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button class="btn btn-sm btn-light" @click="clearFilters">
+                      Clear All
+                    </button>
+                    <button class="btn btn-sm btn-primary" @click="applyFilters">
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Search -->
-            <div class="search-control">
+            <!-- Search Control -->
+            <div class="search-control" style="flex: 1; max-width: 400px; z-index: 10000 !important; position: relative;">
               <div class="input-group">
-                <span class="input-group-text">
+                <span class="input-group-text border-end-0">
                   <i class="fas fa-search"></i>
                 </span>
                 <input 
                   type="text" 
-                  class="form-control" 
+                  class="form-control border-start-0" 
                   v-model="searchQuery"
                   placeholder="Search students..."
                   @input="handleSearch"
                 >
+                <button 
+                  v-if="searchQuery"
+                  class="btn btn-outline-secondary border-start-0" 
+                  type="button"
+                  @click="clearSearch"
+                >
+                  <i class="fas fa-times"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -152,7 +128,6 @@
 
         <!-- Table -->
         <div class="table-responsive">
-          <div class="table-slide-container" :class="slideDirection">
           <table class="table table-hover">
             <thead>
               <tr>
@@ -164,7 +139,7 @@
             </thead>
             <tbody>
             <tr 
-              v-for="student in sortedStudents" 
+                v-for="student in paginatedStudents" 
                   :key="student.studentNumber" 
                   class="clickable-row" 
                   @click="viewStudentDetails(student)"
@@ -188,10 +163,10 @@
                           'select-none': student.currentStatus === 'none'
                         }"
                         v-model="student.currentStatus"
-                        @change="markAttendance(student, student.currentStatus)"
+                        @change="markAttendance(student, $event.target.value)"
                         @click.stop
                       >
-                        <option value="none" disabled>Not marked</option>
+                        <option value="none">Not marked</option>
                         <option value="present">Present</option>
                         <option value="absent">Absent</option>
                         <option value="late">Late</option>
@@ -214,156 +189,133 @@
                             'fa-question-circle': student.currentStatus === 'none'
                           }"
                         ></i>
-                </div>
+                      </div>
+                    </div>
+                  </td>
+              </tr>
+              <tr v-if="paginatedStudents.length === 0">
+                <td colspan="4" class="text-center py-4">
+                  <div class="empty-state-message">
+                    <i class="fas fa-users text-muted mb-2"></i>
+                    <p class="mb-0">No students found</p>
+                    <p class="text-muted small" v-if="selectedYear || selectedSection || selectedSubject">
+                      Try adjusting your filters
+                    </p>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
           </div>
+        
+        <!-- Pagination Controls -->
+        <div class="pagination-controls mt-3 d-flex justify-content-between align-items-center">
+          <div class="pagination-info">
+            Showing {{ paginationInfo.start }} to {{ paginationInfo.end }} of {{ sortedStudents.length }} entries
+          </div>
+          <div class="pagination-buttons">
+            <button 
+              class="btn btn-outline-primary me-2" 
+              @click="previousPage" 
+              :disabled="currentPage === 1"
+            >
+              <i class="fas fa-chevron-left me-1"></i> Previous
+            </button>
+            <button 
+              class="btn btn-outline-primary" 
+              @click="nextPage" 
+              :disabled="currentPage >= totalPages"
+            >
+              Next <i class="fas fa-chevron-right ms-1"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calendar Popup -->
+    <div class="calendar-popup" v-if="showCalendarPopup" @click.self="showCalendarPopup = false">
+      <div class="calendar-container">
+        <div class="calendar-header">
+          <h6 class="mb-0">Select Date</h6>
+          <button type="button" class="btn-close" @click="showCalendarPopup = false"></button>
+        </div>
+        <div class="calendar-body">
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-calendar-day"></i></span>
+            <input 
+              type="date" 
+              class="form-control" 
+              :value="formatDateForInput(currentDate)"
+              :max="formatDateForInput(new Date())"
+              @change="setCurrentDate($event.target.value); showCalendarPopup = false"
+            >
+          </div>
+          
+          <!-- Quick Date Buttons -->
+          <div class="quick-date-buttons mt-3">
+            <button class="btn btn-sm btn-outline-secondary" @click="navigateDate(-7); showCalendarPopup = false">
+              <i class="fas fa-angle-double-left me-1"></i> Last Week
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @click="navigateDate(-1); showCalendarPopup = false">
+              <i class="fas fa-angle-left me-1"></i> Yesterday
+            </button>
+            <button class="btn btn-sm btn-primary" @click="setCurrentDate(formatDateForInput(new Date())); showCalendarPopup = false">
+              Today
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Student Details Modal -->
-    <div v-if="selectedStudent" class="modal-overlay" @click="selectedStudent = null">
-      <div class="modal-wrapper" style="max-width: 1200px;" @click.stop>
-        <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-          <div class="modal-header">
-              <h4 class="modal-title mb-0">
-                <i class="fas fa-user-graduate me-2"></i>
-                Student Attendance Details
-              </h4>
-            <button type="button" class="btn-close" @click="selectedStudent = null"></button>
-          </div>
-          <div class="modal-body">
-              <!-- Student Information -->
-              <div class="student-info-card mb-4">
-                <div class="student-info-header">
-                  <h6 class="mb-0">Student Information</h6>
-              </div>
-                <div class="info-grid">
-                  <div class="info-item">
-                    <label>Student Number</label>
-                    <span>{{ selectedStudent.studentNumber }}</span>
-              </div>
-                  <div class="info-item">
-                    <label>Name</label>
-                    <span>{{ selectedStudent.firstName }} {{ selectedStudent.lastName }}</span>
-                  </div>
-                  <div class="info-item">
-                    <label>Section</label>
-                    <span>{{ selectedSection }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Performance Card with Attendance Overview -->
-              <div class="performance-card mb-4">
-                <div class="performance-header d-flex justify-content-between align-items-center">
-                  <h6 class="mb-0">Attendance Overview</h6>
-                  <div class="date-filter">
-                    <button class="btn btn-sm btn-outline-light" type="button" @click="openHistoryDatePicker">
-                      <i class="fas fa-calendar-alt me-2"></i> Filter Dates
-                    </button>
-                  </div>
-                </div>
-                
-                <!-- Calendar Popup for Date Filter -->
-                <div class="calendar-popup" v-if="showHistoryDatePicker" @click.self="showHistoryDatePicker = false">
-                  <div class="calendar-container">
-                    <div class="calendar-header">
-                      <h6 class="mb-0">Select Date Range</h6>
-                      <button type="button" class="btn-close" @click="showHistoryDatePicker = false"></button>
-                    </div>
-                    <div class="calendar-body">
-                      <div class="row g-3">
-                        <div class="col-md-6">
-                          <label class="form-label">From Date</label>
-                          <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-calendar-day"></i></span>
-                            <input 
-                              type="date" 
-                              class="form-control" 
-                              v-model="historyStartDate"
-                              :max="formatDateForInput(historyEndDate || new Date())"
-                            >
-                          </div>
-                        </div>
-                        <div class="col-md-6">
-                          <label class="form-label">To Date</label>
-                          <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-calendar-day"></i></span>
-                            <input 
-                              type="date" 
-                              class="form-control" 
-                              v-model="historyEndDate"
-                              :max="formatDateForInput(new Date())"
-                            >
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="calendar-footer">
-                      <button 
-                        class="btn btn-secondary" 
-                        @click="resetHistoryDateFilter"
-                      >
-                        <i class="fas fa-redo-alt me-1"></i> Reset
-                      </button>
-                      <button 
-                        class="btn btn-primary" 
-                        @click="applyHistoryDateFilter"
-                      >
-                        <i class="fas fa-check me-1"></i> Apply Filter
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="chart-container">
-                  <canvas id="attendanceChart"></canvas>
-                </div>
-              </div>
-
-              <!-- Attendance History -->
-              <div class="history-card">
-                <div class="history-header d-flex justify-content-between align-items-center">
-                  <h6 class="mb-0">Attendance History</h6>
-                </div>
-                
-                <div class="table-responsive">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Status</th>
-                        <th>Last Modified</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="record in selectedStudent.attendanceHistory" :key="record._id">
-                        <td>{{ formatDate(record.date) }}</td>
-                        <td>
-                          <span :class="'status-' + record.status">
-                            {{ record.status }}
-                          </span>
-                        </td>
-                        <td>{{ formatDate(record.lastModified) }}</td>
-                      </tr>
-                      <tr v-if="!selectedStudent.attendanceHistory || selectedStudent.attendanceHistory.length === 0">
-                        <td colspan="3" class="text-center py-3">No attendance records found for the selected date range.</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <StudentDetailsModal
+      :show="!!selectedStudent"
+      :student="selectedStudent || {}"
+      :year-level="selectedYear"
+      :section="selectedSection"
+      :subject="selectedSubject"
+      title="Student Attendance Details"
+      chart-title="Attendance Overview"
+      history-title="Attendance History"
+      :chart-id="`attendanceChart-${selectedStudent?.studentId}`"
+      :is-class-record="false"
+      @update:show="(value) => !value && (selectedStudent = null)"
+      @close="selectedStudent = null"
+    >
+      <template #history-table>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!selectedStudent?.attendanceHistory || selectedStudent.attendanceHistory.length === 0">
+              <td colspan="2" class="text-center py-3 text-muted">
+                <i class="fas fa-info-circle me-2"></i>No attendance records found.
+              </td>
+            </tr>
+            <tr v-for="record in selectedStudent?.attendanceHistory" :key="record.date">
+              <td>{{ formatDate(record.date) }}</td>
+              <td>
+                <span 
+                  class="badge"
+                  :class="{
+                    'bg-success': record.status === 'present',
+                    'bg-danger': record.status === 'absent',
+                    'bg-warning': record.status === 'late'
+                  }"
+                >
+                  {{ record.status.charAt(0).toUpperCase() + record.status.slice(1) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+    </StudentDetailsModal>
   </div>
 </template>
 
@@ -374,6 +326,7 @@ import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import moment from 'moment-timezone'
 import Chart from 'chart.js/auto'
+import StudentDetailsModal from '@/components/modals/StudentDetailsModal.vue'
 
 // Create axios instance with base URL
 const api = axios.create({
@@ -385,6 +338,9 @@ const api = axios.create({
 
 export default {
   name: 'Attendance',
+  components: {
+    StudentDetailsModal
+  },
   setup() {
     const store = useStore()
     const route = useRoute()
@@ -560,7 +516,7 @@ export default {
     // Function to apply filters
     const applyFilters = async () => {
       console.log('Applying filters:', {
-          year: selectedYear.value,
+        year: selectedYear.value,
         section: selectedSection.value,
         subject: selectedSubject.value
       })
@@ -580,10 +536,8 @@ export default {
         }
       })
       
-      // Fetch students and attendance if all filters are selected
-      if (selectedYear.value && selectedSection.value && selectedSubject.value) {
-        await fetchStudentRecords()
-      }
+      // Always fetch student records when filters are applied
+      await fetchStudentRecords()
     }
     
     // Function to clear filters
@@ -604,236 +558,174 @@ export default {
     // Function to fetch students and their attendance
     const fetchStudentRecords = async () => {
       try {
-        if (!selectedYear.value || !selectedSection.value || !selectedSubject.value) {
-          console.log('Missing required filters for fetchStudentRecords', {
-            year: selectedYear.value,
-            section: selectedSection.value,
-            subject: selectedSubject.value
-          });
-          return;
-        }
-
-        const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id
+        const token = store.state.auth.token;
+        const teacherId = store.state.auth.user?._id;
 
         if (!teacherId) {
           console.error('Teacher ID not available');
           return;
         }
 
-        console.log('Fetching student records with filters:', {
-          year: selectedYear.value,
-          section: selectedSection.value,
-          subject: selectedSubject.value
-        });
-
-        // Use the dedicated endpoint for attendance students
+        // Create a params object with the teacher ID
+        const params = { teacherId };
+        
+        // Add any selected filters to the params
+        if (selectedYear.value) params.year = selectedYear.value;
+        if (selectedSection.value) params.section = selectedSection.value;
+        if (selectedSubject.value) params.subject = selectedSubject.value;
+        
+        console.log('Fetching student records with filters:', params);
+        
         try {
           const response = await api.get('/teacher-class-records/students-for-attendance', {
-          params: {
-              teacherId,
-            year: selectedYear.value,
-            section: selectedSection.value,
-            subject: selectedSubject.value
-          },
-          headers: {
+            params,
+            headers: {
               'Authorization': `Bearer ${token}`
-          }
-        });
+            }
+          });
 
-        console.log('Students API response:', response.data);
+          console.log('Students API response:', response.data);
 
           if (response.data) {
             let studentList = [];
             
             if (Array.isArray(response.data)) {
-              // If response is an array, use it directly
               studentList = response.data;
             } else if (response.data.students && Array.isArray(response.data.students)) {
-              // If response has a students property that is an array
               studentList = response.data.students;
             }
             
+            // Log each student's data to verify studentId is present
+            studentList.forEach(student => {
+              console.log('Student data:', {
+                studentId: student._id || student.studentId,
+                studentNumber: student.studentNumber,
+                name: `${student.firstName} ${student.lastName}`
+              });
+            });
+            
+            // Initialize students with 'none' status and ensure studentId is set
             students.value = studentList.map(student => ({
               ...student,
-              attendance: [],
-              currentStatus: 'none' // Initialize currentStatus property
+              studentId: student._id || student.studentId, // Use _id if studentId is not present
+              currentStatus: 'none'
             }));
             
-            console.log(`Loaded ${students.value.length} students`);
+            console.log(`Loaded ${students.value.length} students with IDs`);
             
-            // Fetch attendance for current date if we have students
+            // Immediately fetch attendance after loading students
             if (students.value.length > 0) {
               await fetchAttendance();
-        } else {
-              console.warn('No students found in the response');
           }
-          } else {
-            console.error('Invalid or empty response from students API');
-          students.value = [];
         }
       } catch (error) {
           console.error('Failed to fetch student records:', error);
-          
-          if (error.response && error.response.status === 404) {
-            console.warn('Students endpoint not found. Check if the API endpoint is implemented.');
-          }
-          
         students.value = [];
       }
       } catch (error) {
         console.error('Error in fetchStudentRecords:', error);
         students.value = [];
       }
-    }
+    };
 
     // Function to fetch attendance for current date
     const fetchAttendance = async () => {
       try {
-        if (!selectedSection.value || !selectedSubject.value) {
-          console.log('fetchAttendance: Missing required data', {
-            section: selectedSection.value,
-            subject: selectedSubject.value,
-            studentsCount: students.value?.length || 0
-          });
+        // If there are no students, we can't fetch attendance
+        if (!students.value.length) {
+          console.log('fetchAttendance: No students to fetch attendance for');
           return;
         }
 
-        console.log('fetchAttendance: Fetching attendance data with filters', {
-          section: selectedSection.value,
-          subject: selectedSubject.value,
-          date: moment(currentDate.value).tz('Asia/Manila').format('YYYY-MM-DD')
+        const date = moment(currentDate.value).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
+        console.log('fetchAttendance: Fetching attendance data for date:', date);
+
+        // Create params object with the date and required filters
+        const params = {
+          teacherId: store.state.auth.user?._id,
+          date: date
+        };
+        
+        // Add any selected filters to the params
+        if (selectedYear.value) params.year = selectedYear.value;
+        if (selectedSection.value) params.section = selectedSection.value;
+        if (selectedSubject.value) params.subject = selectedSubject.value;
+        
+        console.log('Fetching attendance with params:', params);
+        
+        const response = await api.get(`/attendance/date/${date}`, {
+          params,
+          headers: { 'Authorization': `Bearer ${store.state.auth.token}` }
         });
 
-        // Store the current date in a format that can be compared
-        const currentDateFormatted = moment(currentDate.value).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
+        console.log('Attendance data received:', response.data);
 
-        // Create a map of existing attendance records by student ID
-        // This will help us preserve attendance data across date changes
-        const existingAttendanceMap = new Map();
-        
-        // First, store all existing attendance data from students
-        if (students.value && students.value.length > 0) {
-          students.value.forEach(student => {
-            if (student.attendance && Array.isArray(student.attendance)) {
-              existingAttendanceMap.set(student.studentId, [...student.attendance]);
+        // Create a map to store attendance by student ID
+        const studentMap = new Map();
+
+        if (response.data && Array.isArray(response.data)) {
+          console.log(`Processing ${response.data.length} attendance records`);
+          
+          // Group records by student ID to find the most recent one for each student
+          const recordsByStudent = {};
+          
+          response.data.forEach(record => {
+            if (record.studentId) {
+              // If we don't have this student yet, or this record is newer
+              if (!recordsByStudent[record.studentId] || 
+                  (record.createdAt && 
+                   (!recordsByStudent[record.studentId].createdAt || 
+                    new Date(record.createdAt) > new Date(recordsByStudent[record.studentId].createdAt)))) {
+                recordsByStudent[record.studentId] = record;
+                console.log(`Found newer record for student ${record.studentId}: ${record.status} (created at ${record.createdAt})`);
+              }
+            } else {
+              console.log('Record missing studentId:', record);
             }
+          });
+          
+          // Now use the most recent record for each student
+          Object.values(recordsByStudent).forEach(record => {
+            studentMap.set(String(record.studentId), record.status || 'none');
+            console.log(`Using most recent attendance for student ID ${record.studentId}: ${record.status || 'none'} (created at ${record.createdAt})`);
           });
         }
 
-        try {
-          // Use moment.tz to ensure correct timezone handling
-          const date = moment(currentDate.value).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD')
-          const response = await api.get(`/attendance/date/${date}`, {
-            params: {
-              subject: selectedSubject.value,
-              section: selectedSection.value
-            },
-            headers: { 'Authorization': `Bearer ${store.state.auth.token}` }
-          })
-
-          if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-            console.log('Attendance records found:', response.data.length);
+        // Update students with attendance data
+        if (students.value && students.value.length > 0) {
+          students.value = students.value.map(student => {
+            const studentIdStr = String(student.studentId);
+            const status = studentMap.get(studentIdStr);
             
-            // Create a map of attendance records by student ID for the current date
-            const currentDateAttendanceMap = new Map(response.data
-              .filter(record => record.studentId && record.studentId._id) // Filter out records with null studentId
-              .map(record => [
-                record.studentId._id,
-                record
-              ]));
-
-            // If we have students, update them with attendance data
-            if (students.value && students.value.length > 0) {
-              students.value = students.value.map(student => {
-                // Get the attendance record for the current date
-                const currentDateRecord = currentDateAttendanceMap.get(student.studentId);
-                
-                // Get existing attendance records for this student (from other dates)
-                let existingAttendance = existingAttendanceMap.get(student.studentId) || [];
-                
-                // Filter out any records for the current date (to avoid duplicates)
-                existingAttendance = existingAttendance.filter(record => {
-                  if (!record || !record.date) return false;
-                  const recordDate = moment(record.date).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-                  return recordDate !== currentDateFormatted;
-                });
-                
-                // If we have an attendance record for this student on the current date, add it
-                if (currentDateRecord) {
-                  // Set the currentStatus based on the current date's record
-                  return {
-                    ...student,
-                    attendance: [currentDateRecord, ...existingAttendance],
-                    currentStatus: currentDateRecord.status || 'none'
-                  };
-                } else {
-                  // If no attendance record for this student on the current date,
-                  // just keep the existing attendance records and reset currentStatus to 'none'
-                  return {
-                    ...student,
-                    attendance: existingAttendance,
-                    currentStatus: 'none'
-                  };
-                }
-              });
-              console.log('Updated students with attendance data:', students.value.length);
-            } else {
-              console.log('No students available to update with attendance data');
-              // Try to fetch students if they're not available
-              await fetchStudentRecords();
+            // Store the attendance status for this date
+            if (!student.attendanceByDate) {
+              student.attendanceByDate = {};
             }
-          } else {
-            console.log('No attendance records found for the selected date');
             
-            // Keep the existing attendance records for all students
-            if (students.value && students.value.length > 0) {
-              students.value = students.value.map(student => {
-                // Get existing attendance records for this student
-                const existingAttendance = existingAttendanceMap.get(student.studentId) || [];
-                
-                // Return student with existing attendance records (excluding any for current date)
-                // This ensures we don't have stale records for the current date
-                return {
-                  ...student,
-                  attendance: existingAttendance.filter(record => {
-                    if (!record || !record.date) return false;
-                    const recordDate = moment(record.date).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-                    return recordDate !== currentDateFormatted;
-                  }),
-                  currentStatus: 'none' // Reset currentStatus to 'none' for the new date
-                };
-              });
-              
-              // Force a UI update
-              nextTick(() => {
-                students.value = [...students.value];
-              });
+            if (status) {
+              student.attendanceByDate[date] = status;
             }
-          }
-        } catch (error) {
-          console.error('Error fetching attendance data:', error);
-          
-          if (error.response && error.response.status === 404) {
-            console.warn('Attendance API endpoint not found. Check if the API endpoint is implemented.');
-          }
-          
-          // Reset currentStatus to 'none' for all students on error
-          if (students.value && students.value.length > 0) {
-            students.value.forEach(student => {
-              student.currentStatus = 'none';
-            });
             
-            // Force a UI update
-            nextTick(() => {
-              students.value = [...students.value];
-            });
-          }
+            // Use the stored status for this date if available, otherwise use the fetched status
+            const currentStatus = student.attendanceByDate[date] || status || student.currentStatus || 'none';
+            
+            console.log(`Setting status for student ${studentIdStr}: ${currentStatus}`);
+            
+            return {
+              ...student,
+              currentStatus: currentStatus
+            };
+          });
+          
+          // Force a UI update
+          await nextTick();
+          students.value = [...students.value];
+          console.log('Updated attendance status for all students');
         }
       } catch (error) {
         console.error('Error in fetchAttendance:', error);
       }
-    }
+    };
 
     // Create attendance chart
     const createPerformanceChart = () => {
@@ -888,6 +780,28 @@ export default {
       const newCtx = document.getElementById(chartId)?.getContext('2d');
       if (!newCtx) return;
 
+      // Enhanced colors for the chart
+      const chartColors = {
+        present: {
+          backgroundColor: '#4CAF50',
+          hoverBackgroundColor: '#388E3C',
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        absent: {
+          backgroundColor: '#F44336',
+          hoverBackgroundColor: '#D32F2F',
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        late: {
+          backgroundColor: '#FFC107',
+          hoverBackgroundColor: '#FFA000',
+          borderColor: '#fff',
+          borderWidth: 2
+        }
+      };
+
       // Create the chart
       attendanceChart = new Chart(newCtx, {
         type: 'doughnut',
@@ -895,17 +809,81 @@ export default {
           labels: ['Present', 'Absent', 'Late'],
           datasets: [{
             data: [stats.presentPercentage, stats.absentPercentage, stats.latePercentage],
-            backgroundColor: ['#4CAF50', '#f44336', '#FFC107']
+            backgroundColor: [
+              chartColors.present.backgroundColor,
+              chartColors.absent.backgroundColor,
+              chartColors.late.backgroundColor
+            ],
+            hoverBackgroundColor: [
+              chartColors.present.hoverBackgroundColor,
+              chartColors.absent.hoverBackgroundColor,
+              chartColors.late.hoverBackgroundColor
+            ],
+            borderColor: [
+              chartColors.present.borderColor,
+              chartColors.absent.borderColor,
+              chartColors.late.borderColor
+            ],
+            borderWidth: 2,
+            borderRadius: 5,
+            spacing: 5,
+            hoverOffset: 10
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          cutout: '70%',
+          animation: {
+            animateScale: true,
+            animateRotate: true,
+            duration: 1000,
+            easing: 'easeOutQuart'
+          },
           plugins: {
             legend: {
-              position: 'bottom'
+              position: 'bottom',
+              labels: {
+                padding: 20,
+                boxWidth: 15,
+                boxHeight: 15,
+                font: {
+                  size: 14,
+                  weight: 'bold'
+                },
+                generateLabels: (chart) => {
+                  const data = chart.data;
+                  if (data.labels.length && data.datasets.length) {
+                    return data.labels.map((label, i) => {
+                      const meta = chart.getDatasetMeta(0);
+                      const style = meta.controller.getStyle(i);
+                      
+                      return {
+                        text: `${label}: ${data.datasets[0].data[i].toFixed(1)}%`,
+                        fillStyle: style.backgroundColor,
+                        strokeStyle: style.borderColor,
+                        lineWidth: style.borderWidth,
+                        hidden: isNaN(data.datasets[0].data[i]) || meta.data[i].hidden,
+                        index: i
+                      };
+                    });
+                  }
+                  return [];
+                }
+              }
             },
             tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleFont: {
+                size: 16,
+                weight: 'bold'
+              },
+              bodyFont: {
+                size: 14
+              },
+              padding: 15,
+              cornerRadius: 8,
+              displayColors: true,
               callbacks: {
                 label: function(context) {
                   const label = context.label || '';
@@ -1095,118 +1073,57 @@ export default {
     // Update attendance status
     const markAttendance = async (student, status) => {
       try {
-        // Skip if status is 'none' or not provided
-        if (!status || status === 'none') {
-          console.log('No valid status selected');
+        if (!status || !student) {
+          console.log('Invalid status or student:', { status, student });
           return;
         }
         
-        console.log('Marking attendance for student:', student.studentNumber, 'with status:', status);
-        
-        // Update the student's currentStatus property immediately for better UI responsiveness
-        student.currentStatus = status;
-        
-        const token = store.state.auth.token;
-        const teacherId = store.state.auth.user?._id;
-        
-        if (!teacherId) {
-          console.error('Teacher ID not available');
-          alert('Teacher information is not available. Please try logging in again.');
-          store.dispatch('logout');
-          router.push('/login');
-          return;
-        }
-        
-        // Format the current date for consistency
-        const formattedDate = moment(currentDate.value).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-        
-        // Prepare the attendance data for the API request
+        const date = moment(currentDate.value).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
+        console.log('Marking attendance:', {
+          studentId: student.studentId,
+          studentNumber: student.studentNumber,
+          status,
+          date
+        });
+
         const attendanceData = {
           studentId: student.studentId,
-          teacherId: teacherId,
-          date: formattedDate,
+          studentNumber: student.studentNumber,
+          teacherId: store.state.auth.user._id,
+          date: date,
           subject: selectedSubject.value,
           section: selectedSection.value,
-          status: status
+          year: selectedYear.value,
+          status: status,
+          createdAt: new Date().toISOString() // Ensure we have a current timestamp
         };
         
-        console.log('Sending attendance update with data:', attendanceData);
-        
-        // Update the student's attendance in the local state immediately
-        // This ensures the UI updates even if the API call fails
-        const studentIndex = students.value.findIndex(s => s.studentId === student.studentId);
-        if (studentIndex !== -1) {
-          // Get existing attendance records for this student
-          const existingAttendance = [...(students.value[studentIndex].attendance || [])];
+        // Update UI immediately for better responsiveness
+        student.currentStatus = status;
+
+        const response = await api.post('/attendance', attendanceData, {
+          headers: { 'Authorization': `Bearer ${store.state.auth.token}` }
+        });
+
+        if (response.data) {
+          console.log('Attendance marked successfully:', response.data);
           
-          // Find if there's already an attendance record for the current date
-          const currentDateRecordIndex = existingAttendance.findIndex(record => {
-            if (!record || !record.date) return false;
-            const recordDate = moment(record.date).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-            return recordDate === formattedDate;
-          });
-          
-          if (currentDateRecordIndex !== -1) {
-            // Update existing attendance record for the current date
-            existingAttendance[currentDateRecordIndex].status = status;
-            existingAttendance[currentDateRecordIndex].lastModified = new Date();
-          } else {
-            // Create new attendance record for the current date
-            const newRecord = {
-              studentId: { 
-                _id: student.studentId, 
-                firstName: student.firstName, 
-                lastName: student.lastName, 
-                studentNumber: student.studentNumber 
-              },
-              status,
-              date: new Date(formattedDate),
-              subject: selectedSubject.value,
-              section: selectedSection.value,
-              lastModified: new Date()
-            };
-            
-            // Add the new record to the beginning of the array
-            existingAttendance.unshift(newRecord);
+          // Store the attendance status in the student object for this date
+          if (!student.attendanceByDate) {
+            student.attendanceByDate = {};
           }
+          student.attendanceByDate[date] = status;
           
-          // Update the student's attendance array
-          students.value[studentIndex].attendance = existingAttendance;
-          
-          // Force a UI update to ensure the row color changes immediately
-          nextTick(() => {
-            // This will trigger a re-render of the component
-            students.value = [...students.value];
-          });
-          
-          console.log(`Updated student ${student.studentNumber} attendance status to ${status} in local state for date ${formattedDate}`);
-        }
-        
-        // Try to update on the server
-        try {
-          const response = await api.post('/attendance', attendanceData, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          console.log('Attendance update response:', response.data);
-        } catch (error) {
-          console.error('API error when marking attendance:', error);
-          
-          // If it's a 404 error (endpoint not found), show a more helpful message
-          if (error.response && error.response.status === 404) {
-            console.warn('Attendance API endpoint not found. The server may need to be restarted after adding the attendance routes.');
-            alert('The attendance service is not responding. Please restart the server to enable attendance tracking.');
-          } else {
-            // For other errors, show an alert with more details
-            alert(`Failed to save attendance for ${student.firstName} ${student.lastName}. The change is shown in the UI but not saved to the server. Error: ${error.response?.data?.message || error.message}`);
+          // If the student is currently selected in the details modal, update their history
+          if (selectedStudent.value && selectedStudent.value.studentId === student.studentId) {
+            await fetchStudentAttendanceHistory(selectedStudent.value);
           }
         }
       } catch (error) {
-        console.error('Failed to update attendance:', error);
-        alert(`An unexpected error occurred while updating attendance. Please try again.`);
+        console.error('Error marking attendance:', error);
+        // Revert the status on error
+        student.currentStatus = 'none';
+        alert('Failed to save attendance. Please try again.');
       }
     };
 
@@ -1216,13 +1133,16 @@ export default {
     }
 
     // Watch for query parameter changes
-    watch([selectedYear, selectedSection, selectedSubject], () => {
+    watch([selectedYear, selectedSection, selectedSubject], async () => {
       // Save selected values to localStorage
       if (selectedYear.value) localStorage.setItem('selectedYear', selectedYear.value)
       if (selectedSection.value) localStorage.setItem('selectedSection', selectedSection.value)
       if (selectedSubject.value) localStorage.setItem('selectedSubject', selectedSubject.value)
       
-      fetchStudentRecords()
+      // Fetch student records and attendance when filters change
+      if (selectedYear.value && selectedSection.value && selectedSubject.value) {
+        await fetchStudentRecords()
+      }
       
       // Update navigation title
       if (selectedYear.value && selectedSection.value && selectedSubject.value) {
@@ -1238,18 +1158,21 @@ export default {
     })
 
     // Watch for date changes
-    watch(currentDate, async () => {
-      console.log('Current date changed, updating attendance status');
+    watch(currentDate, async (newDate, oldDate) => {
+      console.log('Current date changed from', moment(oldDate).format('YYYY-MM-DD'), 'to', moment(newDate).format('YYYY-MM-DD'));
       
-      // Reset currentStatus for all students
-      if (students.value && students.value.length > 0) {
-        students.value.forEach(student => {
-          student.currentStatus = 'none';
+      // Only fetch if we have the required data
+      if (selectedYear.value && selectedSection.value && selectedSubject.value && students.value.length > 0) {
+        console.log('Fetching attendance data for new date');
+        await fetchAttendance();
+      } else {
+        console.log('Skipping attendance fetch due to missing data:', {
+          year: selectedYear.value,
+          section: selectedSection.value,
+          subject: selectedSubject.value,
+          studentsCount: students.value?.length || 0
         });
       }
-      
-      // Fetch attendance data for the new date
-      await fetchAttendance();
     });
 
     // Clean up chart when component unmounts
@@ -1361,29 +1284,7 @@ export default {
         return student.currentStatus;
       }
       
-      // Format the current date for comparison
-      const currentDateFormatted = moment(currentDate.value).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-      
-      // Check if the student has attendance records from the database
-      if (student.attendance && student.attendance.length > 0) {
-        // Find the attendance record for the current date
-        const attendanceRecord = student.attendance.find(record => {
-          if (!record || !record.date) return false;
-          // Format the record date to match the current date format
-          const recordDate = moment(record.date).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-          return recordDate === currentDateFormatted;
-        });
-        
-        // If we found an attendance record for the current date, return its status
-        if (attendanceRecord && attendanceRecord.status) {
-          // Update the student's currentStatus property
-          student.currentStatus = attendanceRecord.status;
-          return attendanceRecord.status;
-        }
-      }
-      
-      // If no attendance record found for the current date, return 'none'
-      student.currentStatus = 'none';
+      // If no status is set, return 'none'
       return 'none';
     }
 
@@ -1460,15 +1361,27 @@ export default {
     onMounted(async () => {
       if (store.getters.isLoggedIn) {
         try {
+          console.log('Component mounted, initializing...');
+          
           // Fetch available years, sections, and subjects
           await Promise.all([
             fetchAvailableYearsAndSections(),
             fetchTeacherSubjects()
           ]);
           
+          console.log('Initialization complete, checking for saved filters:', {
+            year: selectedYear.value,
+            section: selectedSection.value,
+            subject: selectedSubject.value
+          });
+          
           // Apply filters if they are set
           if (selectedYear.value && selectedSection.value && selectedSubject.value) {
+            console.log('Saved filters found, fetching student records...');
             await fetchStudentRecords();
+            console.log('Student records loaded');
+          } else {
+            console.log('No saved filters found, skipping data fetch');
           }
           
           // Set up date auto-update
@@ -1483,88 +1396,34 @@ export default {
     
     // Function to refresh attendance data
     const refreshAttendance = async () => {
-      console.log('Refreshing attendance data');
+      console.log('Manually refreshing attendance data');
       
-      if (students.value && students.value.length > 0) {
-        // Reset currentStatus for all students
-        students.value.forEach(student => {
-          student.currentStatus = 'none';
-        });
+      // Show loading indicator
+      const refreshButton = document.querySelector('.btn-outline-secondary i.fa-sync-alt');
+      if (refreshButton) {
+        refreshButton.classList.add('fa-spin');
       }
       
+      try {
       // Fetch fresh attendance data from the server
       await fetchAttendance();
       
       // Force a UI update to ensure the changes are reflected
       nextTick(() => {
         students.value = [...students.value];
-      });
-    };
-    
-    // Add a watch for currentDate to refresh attendance data when date changes
-    watch(currentDate, async () => {
-      console.log('Current date changed, refreshing attendance data');
-      await fetchAttendance();
-    });
-
-    // Function to load attendance status from localStorage
-    const loadAttendanceFromLocalStorage = () => {
-      if (!students.value || students.value.length === 0) return;
-      
-      const currentDateFormatted = moment(currentDate.value).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-      console.log('Loading attendance from localStorage for date:', currentDateFormatted);
-      
-      // Loop through all students and check if they have attendance status in localStorage
-      students.value.forEach(student => {
-        const localStorageKey = `attendance_${student.studentId}_${currentDateFormatted}`;
-        const savedStatus = localStorage.getItem(localStorageKey);
-        
-        if (savedStatus && ['present', 'absent', 'late'].includes(savedStatus)) {
-          console.log(`Found saved status for student ${student.studentNumber}: ${savedStatus}`);
-          
-          // Update the student's currentStatus property
-          student.currentStatus = savedStatus;
-          
-          // Check if the student already has an attendance record for this date
-          const hasExistingRecord = student.attendance && student.attendance.some(record => {
-            if (!record || !record.date) return false;
-            const recordDate = moment(record.date).tz('Asia/Manila').startOf('day').format('YYYY-MM-DD');
-            return recordDate === currentDateFormatted;
-          });
-          
-          // If no existing record, create one from the localStorage data
-          if (!hasExistingRecord) {
-            if (!student.attendance) student.attendance = [];
-            
-            student.attendance.unshift({
-              studentId: { 
-                _id: student.studentId, 
-                firstName: student.firstName, 
-                lastName: student.lastName, 
-                studentNumber: student.studentNumber 
-              },
-              status: savedStatus,
-              date: new Date(currentDateFormatted),
-              subject: selectedSubject.value,
-              section: selectedSection.value,
-              lastModified: new Date()
-            });
-            
-            console.log(`Created attendance record from localStorage for student ${student.studentNumber}`);
+          console.log('Attendance data refreshed successfully');
+        });
+      } catch (error) {
+        console.error('Error refreshing attendance data:', error);
+      } finally {
+        // Remove loading indicator
+        setTimeout(() => {
+          if (refreshButton) {
+            refreshButton.classList.remove('fa-spin');
           }
-        }
-      });
-      
-      // Force a UI update to ensure the changes are reflected
-      nextTick(() => {
-        students.value = [...students.value];
-      });
+        }, 500);
+      }
     };
-
-    // Add watch for currentDate to refresh attendance data when date changes
-    watch(currentDate, () => {
-      fetchAttendance();
-    });
 
     // Add openDatePicker function
     const openDatePicker = () => {
@@ -1590,6 +1449,51 @@ export default {
     // Add openCalendarPopup function
     const openCalendarPopup = () => {
       showCalendarPopup.value = true;
+    }
+
+    // Add pagination state
+    const currentPage = ref(1)
+    const itemsPerPage = 25
+
+    // Compute total pages
+    const totalPages = computed(() => Math.ceil(sortedStudents.value.length / itemsPerPage))
+
+    // Get paginated students
+    const paginatedStudents = computed(() => {
+      const start = (currentPage.value - 1) * itemsPerPage
+      const end = start + itemsPerPage
+      return sortedStudents.value.slice(start, end)
+    })
+
+    // Compute pagination info
+    const paginationInfo = computed(() => {
+      const start = sortedStudents.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage + 1
+      const end = Math.min(start + itemsPerPage - 1, sortedStudents.value.length)
+      return { start, end }
+    })
+
+    // Pagination methods
+    const nextPage = () => {
+      if (currentPage.value < totalPages.value) {
+        currentPage.value++
+      }
+    }
+
+    const previousPage = () => {
+      if (currentPage.value > 1) {
+        currentPage.value--
+      }
+    }
+
+    // Reset pagination when filters change
+    watch([searchQuery, selectedYear, selectedSection, selectedSubject], () => {
+      currentPage.value = 1
+    })
+
+    // Add clearSearch function if it doesn't exist
+    const clearSearch = () => {
+      searchQuery.value = ''
+      handleSearch()
     }
 
     return {
@@ -1633,752 +1537,481 @@ export default {
       applyHistoryDateFilter,
       showCalendarPopup,
       openCalendarPopup,
-      refreshAttendance
+      refreshAttendance,
+      currentPage,
+      totalPages,
+      paginatedStudents,
+      paginationInfo,
+      nextPage,
+      previousPage,
+      clearSearch,
     }
   }
 }
 </script>
 
 <style scoped>
-/* Import shared styles from ClassRecords.vue */
+/* Base z-index hierarchy - significantly increased values */
+:root {
+  --z-base: 1;
+  --z-table: 10;
+  --z-controls: 1000;
+  --z-dropdown: 10000;
+  --z-modal-backdrop: 20000;
+  --z-modal-wrapper: 20100;
+  --z-modal-content: 20200;
+  --z-table-header: 20;
+}
+
 .attendance-view {
-  padding: 1.5rem 2rem;
-  background:rgb(255, 255, 255);
-  min-height: calc(100vh - 70px);
-}
-
-/* Date Navigation Styles */
-.date-navigation {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.75rem;
-}
-
-.date-nav-container {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.date-nav-btn {
-  height: 40px;
-  width: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  max-width: 100%;
+  margin: 0 auto;
   padding: 0;
-  border-radius: 50%;
-  transition: all 0.2s ease;
-}
-
-.date-nav-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.date-display {
-  background: #f8f9fa;
-  padding: 0.5rem 1.5rem;
-  border-radius: 0.5rem;
-  font-weight: 500;
-  min-width: 200px;
-  text-align: center;
-  cursor: pointer;
   position: relative;
-  transition: all 0.2s ease;
-  border: 1px solid #dee2e6;
+}
+
+/* Controls container */
+.controls-container {
+  position: relative;
+  z-index: var(--z-controls);
+  background: white;
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+/* Dropdown styles */
+.dropdown {
+  position: relative;
+  z-index: var(--z-dropdown);
+}
+
+.dropdown-menu {
+  position: absolute !important;
+  z-index: var(--z-dropdown) !important;
+  transform: none !important;
+  top: 100% !important;
+  left: 0 !important;
+  float: none !important;
+  min-width: 10rem !important;
+  background-color: #fff !important;
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  padding: 0.5rem 0 !important;
+  margin-top: 0.5rem !important;
+}
+
+/* Table container - lower z-index than controls */
+.table-responsive {
+  position: relative;
+  z-index: var(--z-table);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: visible;
+  margin-top: 1rem;
+}
+
+.card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: visible !important;
+  position: relative;
+}
+
+.card-body {
+  padding: 1.5rem;
+  position: relative;
+}
+
+.table-controls {
+  position: relative;
+  z-index: 10000 !important; /* Same as dropdown z-index to ensure it stays on top */
+  background: white;
+  padding: 1rem;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+  overflow: visible !important;
+}
+
+/* Dropdown button */
+.btn-control {
+  position: relative;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #4a5568;
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.date-display:hover {
-  background-color: #e9ecef;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  transform: translateY(-2px);
-}
-
-.date-display:active {
-  transform: translateY(0);
-}
-
-.date-display::after {
-  content: '\f073';
-  font-family: 'Font Awesome 5 Free';
-  font-weight: 900;
-  margin-left: 8px;
-  font-size: 0.875rem;
-  color: #6c757d;
+  gap: 0.5rem;
+  border-radius: 8px;
   transition: all 0.2s ease;
+  z-index: var(--z-controls);
 }
 
-.date-display:hover::after {
-  color: #495057;
-  transform: scale(1.1);
+.btn-control:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #2d3748;
 }
 
-.date-quick-nav {
+/* Dropdown menu */
+.control-menu {
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  padding: 0.5rem 0 !important;
+  margin-top: 0.5rem !important;
+  z-index: var(--z-dropdown) !important;
+  position: absolute !important;
+  min-width: 10rem !important;
+  background-color: #fff !important;
+}
+
+/* Override Bootstrap's dropdown styles */
+.dropdown-menu.show {
+  display: block !important;
+  z-index: var(--z-dropdown) !important;
+  position: absolute !important;
+}
+
+.dropdown-item {
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  color: #4a5568;
   display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
-/* Table Slide Animation */
-.table-slide-container {
-  transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55), opacity 0.5s ease;
+.dropdown-item:hover {
+  background-color: #f8fafc;
+  color: #2d3748;
 }
 
-.slide-left {
-  animation: enhancedSlideLeft 0.5s forwards;
+.dropdown-header {
+  color: #2d3748;
+  font-weight: 600;
+  font-size: 1rem;
 }
 
-.slide-right {
-  animation: enhancedSlideRight 0.5s forwards;
-}
-
-@keyframes enhancedSlideLeft {
-  0% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-  40% {
-    transform: translateX(-30px);
-    opacity: 0;
-  }
-  60% {
-    transform: translateX(30px);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes enhancedSlideRight {
-  0% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-  40% {
-    transform: translateX(30px);
-    opacity: 0;
-  }
-  60% {
-    transform: translateX(-30px);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-/* Top Nav Title */
-.top-nav-title {
-  background: #203464;
+.filter-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #e53e3e;
   color: white;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
 }
 
-.top-nav-title h4 {
-  font-size: 1.25rem;
-  font-weight: 500;
-  margin: 0;
+.search-control {
+  position: relative;
+  z-index: 10000 !important;
 }
 
-/* Attendance Status Styles */
-.status-present {
-  background-color: #4CAF50;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
+/* Table styles from ClassRecords */
+.table {
+  width: 100%;
+  margin-bottom: 0;
+  color: #4a5568;
+  vertical-align: top;
+  border-color: #e2e8f0;
 }
 
-.status-absent {
-  background-color: #f44336;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-.status-late {
-  background-color: #FFC107;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-.status-none {
-  background-color: #e9ecef;
-  color: #495057;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-/* Attendance Dropdown Styles */
-.attendance-select {
-  min-width: 120px;
-  font-size: 0.875rem;
-  transition: all 0.3s ease;
-  border-width: 2px;
-}
-
-.attendance-select:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.select-present {
-  border-color: #4CAF50;
-  background-color: rgba(76, 175, 80, 0.1);
-  color: #2E7D32;
-  font-weight: 500;
-}
-
-.select-absent {
-  border-color: #f44336;
-  background-color: rgba(244, 67, 54, 0.1);
-  color: #C62828;
-  font-weight: 500;
-}
-
-.select-late {
-  border-color: #FFC107;
-  background-color: rgba(255, 193, 7, 0.1);
-  color: #F57F17;
-  font-weight: 500;
-}
-
-.select-none {
-  border-color: #9e9e9e;
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-table-header);
   background-color: #f8f9fa;
-  color: #6c757d;
+  color: #666;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border-top: none;
+  white-space: nowrap;
+  vertical-align: bottom;
+  border-bottom: 2px solid #e2e8f0;
 }
 
-/* Row status styling */
-.status-row-present {
-  background-color: rgba(76, 175, 80, 0.15) !important;
+.table td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  border-color: #eee;
+  border-top: 1px solid #e2e8f0;
 }
 
-.status-row-absent {
-  background-color: rgba(244, 67, 54, 0.15) !important;
-}
-
-.status-row-late {
-  background-color: rgba(255, 193, 7, 0.15) !important;
-}
-
-.status-row-present:hover {
-  background-color: rgba(76, 175, 80, 0.25) !important;
-}
-
-.status-row-absent:hover {
-  background-color: rgba(244, 67, 54, 0.25) !important;
-}
-
-.status-row-late:hover {
-  background-color: rgba(255, 193, 7, 0.25) !important;
-}
-
-/* Attendance Dropdown Option Styles - these will be visible when dropdown is open */
-.attendance-select option[value="present"] {
-  background-color: rgba(76, 175, 80, 0.2);
-  color: #2E7D32;
-  font-weight: 500;
-  padding: 8px;
-}
-
-.attendance-select option[value="absent"] {
-  background-color: rgba(244, 67, 54, 0.2);
-  color: #C62828;
-  font-weight: 500;
-  padding: 8px;
-}
-
-.attendance-select option[value="late"] {
-  background-color: rgba(255, 193, 7, 0.2);
-  color: #F57F17;
-  font-weight: 500;
-  padding: 8px;
-}
-
-.attendance-select option[value="none"] {
+.table tbody tr:hover {
   background-color: #f8f9fa;
-  color: #6c757d;
-  padding: 8px;
 }
 
-/* Clickable Row Styles */
+.table-hover tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
 .clickable-row {
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .clickable-row:hover {
-  background-color: #f8f9fa;
+  background-color: rgba(0, 0, 0, 0.02);
 }
 
-/* Button Group Styles */
-.btn-group .btn {
-  border: 1px solid #dee2e6;
-  background-color: white;
+.date-display {
+  font-size: 1.1rem;
+  font-weight: 500;
   color: #495057;
-  font-size: 0.875rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  min-width: 200px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.btn-group .btn:hover {
-  background-color: #f8f9fa;
+.date-display:hover {
+  background: #f8fafc;
 }
 
-.btn-group .btn.active {
-  color: white;
-}
-
-.btn-group .btn.active.btn-success {
-  background-color: #4CAF50;
-  border-color: #4CAF50;
-}
-
-.btn-group .btn.active.btn-warning {
-  background-color: #FFC107;
-  border-color: #FFC107;
-}
-
-.btn-group .btn.active.btn-danger {
-  background-color: #f44336;
-  border-color: #f44336;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1050;
-}
-
-.modal-wrapper {
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  max-width: 90%;
-  max-height: 90vh;
-  width: 100%;
-}
-
-.modal-dialog {
-  margin: 0;
-  max-width: none;
-  width: 100%;
-}
-
-.modal-content {
-  border: none;
-  border-radius: 12px;
-}
-
-.modal-header {
-  background: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
-  padding: 1rem 1.5rem;
-}
-
-.modal-body {
-  padding: 1.5rem;
-  max-height: calc(90vh - 70px);
-  overflow-y: auto;
-}
-
-/* Student Info Card */
-.student-info-card {
-  background: #f8f9fa;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.student-info-header {
-  background: #203464;
-  color: white;
-  padding: 0.75rem 1rem;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
-  padding: 1rem;
-}
-
-.info-item {
+.empty-state-message {
   display: flex;
   flex-direction: column;
-}
-
-.info-item label {
-  font-size: 0.75rem;
-  color: #6c757d;
-  margin-bottom: 0.25rem;
-}
-
-.info-item span {
-  font-weight: 500;
-}
-
-/* Performance Card */
-.performance-card {
-  background: #f8f9fa;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.performance-header {
-  background: #203464;
-  color: white;
-  padding: 0.75rem 1rem;
-}
-
-.chart-container {
-  height: 300px;
-  padding: 1rem;
-}
-
-/* History Card */
-.history-card {
-  background: #f8f9fa;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.history-header {
-  background: #203464;
-  color: white;
-  padding: 0.75rem 1rem;
-}
-
-/* Table Controls */
-.table-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.btn-control {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  color: #495057;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.btn-control:hover {
-  background: #e9ecef;
-}
-
-.control-menu {
-  padding: 0.5rem;
-  border: none;
-  border-radius: 0.5rem;
-  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-  min-width: 200px;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 1rem;
-  border-radius: 0.25rem;
-}
-
-.dropdown-item:hover {
-  background: #f8f9fa;
-}
-
-.search-control {
-  flex: 1;
-  max-width: 300px;
-}
-
-.search-control .input-group-text {
-  background: #f8f9fa;
-  border-right: none;
-}
-
-.search-control .form-control {
-  border-left: none;
-}
-
-.search-control .form-control:focus {
-  box-shadow: none;
-  border-color: #ced4da;
-}
-
-/* Attendance Status Container */
-.attendance-status-container {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Status Indicator */
-.status-indicator {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  font-size: 1.2rem;
-}
-
-.indicator-present {
-  color: #4CAF50;
-  animation: pulse-green 2s infinite;
-}
-
-.indicator-absent {
-  color: #f44336;
-  animation: pulse-red 2s infinite;
-}
-
-.indicator-late {
-  color: #FFC107;
-  animation: pulse-yellow 2s infinite;
-}
-
-.indicator-none {
-  color: #9e9e9e;
-}
-
-/* Enhanced Date Filter Styles */
-.date-filter .btn-outline-light {
-  border-color: rgba(255, 255, 255, 0.5);
-  transition: all 0.3s ease;
-}
-
-.date-filter .btn-outline-light:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-color: white;
-}
-
-#historyDateFilter {
-  transition: all 0.3s ease;
-}
-
-#historyDateFilter .form-label {
+  padding: 2rem;
   color: #6c757d;
+}
+
+.empty-state-message i {
+  font-size: 2rem;
+}
+
+.pagination-controls {
+  background: white;
+  padding: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pagination-info {
+  color: #4a5568;
+  font-size: 0.9rem;
+}
+
+.pagination-buttons .btn {
+  min-width: 100px;
+}
+
+.status-badge {
+  padding: 0.5em 0.75em;
+  border-radius: 0.375rem;
   font-weight: 500;
+  font-size: 0.875rem;
+  text-transform: capitalize;
 }
 
-#historyDateFilter .btn-outline-secondary {
-  font-size: 0.8rem;
-  padding: 0.25rem 0.5rem;
+.status-present {
+  background-color: #48bb78;
+  color: white;
 }
 
-#historyDateFilter .btn-outline-secondary:hover {
-  background-color: #e9ecef;
+.status-absent {
+  background-color: #f56565;
+  color: white;
 }
 
-/* Date Filter Dropdown Styles */
-.dropdown-menu.control-menu {
-  animation: fadeInDown 0.3s ease;
+.status-late {
+  background-color: #ed8936;
+  color: white;
 }
 
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-  opacity: 1;
-    transform: translateY(0);
-  }
+.status-excused {
+  background-color: #4299e1;
+  color: white;
 }
 
-@keyframes pulse-green {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes pulse-red {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes pulse-yellow {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-#chartDateFilter {
-  transition: all 0.3s ease;
-  border-bottom: 1px solid #dee2e6;
-}
-
-#chartDateFilter .form-label {
-  color: #6c757d;
-  font-weight: 500;
-}
-
-#chartDateFilter .btn-outline-secondary {
-  font-size: 0.8rem;
-  padding: 0.25rem 0.5rem;
-}
-
-#chartDateFilter .btn-outline-secondary:hover {
-  background-color: #e9ecef;
-}
-
-/* Calendar Popup Styles */
 .calendar-popup {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  width: 100vw;
+  height: 100vh;
   display: flex;
-  justify-content: center;
   align-items: center;
-  z-index: 1060;
-  animation: fadeIn 0.2s ease;
+  justify-content: center;
+  z-index: var(--z-modal-wrapper);
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .calendar-container {
+  position: relative;
   background: white;
   border-radius: 12px;
-  width: 350px;
-  max-width: 90%;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  animation: slideUp 0.3s ease;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: var(--z-modal-content);
+  max-width: 400px;
+  width: 100%;
 }
 
 .calendar-header {
-  background: #203464;
-  color: white;
-  padding: 1rem 1.5rem;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-}
-
-.calendar-header .btn-close {
-  filter: invert(1) brightness(200%);
+  justify-content: space-between;
+  margin-bottom: 1rem;
 }
 
 .calendar-body {
-  padding: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .quick-date-buttons {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: space-between;
 }
 
-/* Date Display Enhancements */
-.date-display {
-  background: #f8f9fa;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-weight: 500;
-  min-width: 180px;
-  text-align: center;
-  cursor: pointer;
+.student-details {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 1.5rem;
+}
+
+.chart-section {
   position: relative;
-  transition: all 0.2s ease;
-  border: 1px solid #dee2e6;
+  z-index: var(--z-modal-content);
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.chart-section h6 {
+  color: #2d3748;
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.attendance-table {
+  margin-top: 1rem;
+  font-size: 1.1rem;
+}
+
+.attendance-table th {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2d3748;
+  background: white;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-table-header);
+}
+
+.attendance-table td {
+  font-size: 1.1rem;
+  color: #4a5568;
+}
+
+.badge {
+  font-size: 1rem;
+  padding: 0.5em 1em;
+}
+
+/* Chart container */
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 300px;
+}
+
+/* Add these styles for attendance status */
+.attendance-status-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+.attendance-select {
+  flex: 1;
+  padding-right: 2.5rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+
+.select-present {
+  border-color: #48bb78;
+  background-color: rgba(72, 187, 120, 0.1);
+}
+
+.select-absent {
+  border-color: #f56565;
+  background-color: rgba(245, 101, 101, 0.1);
+}
+
+.select-late {
+  border-color: #ed8936;
+  background-color: rgba(237, 137, 54, 0.1);
+}
+
+.select-none {
+  border-color: #a0aec0;
+  background-color: rgba(160, 174, 192, 0.1);
+}
+
+.status-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 1rem;
+  color: white;
 }
 
-.date-display:hover {
-  background-color: #e9ecef;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+.indicator-present {
+  background-color: #48bb78;
 }
 
-.date-display::after {
-  content: '\f073';
-  font-family: 'Font Awesome 5 Free';
-  font-weight: 900;
-  margin-left: 8px;
-  font-size: 0.875rem;
-  color: #6c757d;
-  transition: all 0.2s ease;
+.indicator-absent {
+  background-color: #f56565;
 }
 
-.date-display:hover::after {
-  color: #495057;
+.indicator-late {
+  background-color: #ed8936;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.indicator-none {
+  background-color: #a0aec0;
 }
 
-@keyframes slideUp {
-  from { 
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Add these styles for status row highlighting */
+.status-row-present {
+  background-color: rgba(72, 187, 120, 0.05);
+}
+
+.status-row-absent {
+  background-color: rgba(245, 101, 101, 0.05);
+}
+
+.status-row-late {
+  background-color: rgba(237, 137, 54, 0.05);
 }
 </style> 

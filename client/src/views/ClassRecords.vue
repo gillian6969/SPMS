@@ -1,12 +1,5 @@
-<template>
+﻿<template>
   <div class="class-records">
-    <!-- Add Title in TopNav style -->
-    <div class="top-nav-title mb-4" v-if="selectedYear && selectedSection && selectedSubject">
-      <h4 class="mb-0">
-        Class Records of {{ selectedYear }} - {{ selectedSection }} | {{ selectedSubject }}
-      </h4>
-    </div>
-
     <!-- Control Buttons and Date Navigation -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div class="d-flex gap-2">
@@ -131,7 +124,6 @@
         </div>
 
         <div class="table-responsive">
-          <div class="table-slide-container" :class="slideDirection">
             <table class="table table-hover">
               <thead>
                 <tr>
@@ -148,9 +140,9 @@
                 </tr>
               </thead>
               <tbody>
-                <template v-if="sortedStudents.length > 0">
+              <template v-if="paginatedStudents.length > 0">
                   <tr 
-                    v-for="student in sortedStudents" 
+                  v-for="student in paginatedStudents" 
                     :key="student.studentNumber"
                     @click="viewStudentDetails(student)"
                     class="clickable-row"
@@ -162,10 +154,10 @@
                       <input 
                         type="number" 
                         class="form-control form-control-sm score-input"
-                        v-model="student.scores[assessment.id]"
+                        :value="getStudentScore(student, assessment)"
                         :max="assessment.maxScore"
                         min="0"
-                        @change="updateScore(student, assessment)"
+                        @input="updateScore(student, assessment, $event.target.value)"
                         @click.stop
                       >
                     </td>
@@ -185,287 +177,31 @@
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Add Assessment Modal -->
-    <div v-if="showAddAssessmentModal" class="modal-overlay">
-      <div class="modal-wrapper">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Add Assessment</h5>
-              <button type="button" class="btn-close" @click="showAddAssessmentModal = false"></button>
-            </div>
-            <div class="modal-body">
-              <form @submit.prevent="handleAddAssessment">
-                <!-- Assessment Type -->
-                <div class="mb-3">
-                  <label class="form-label">Type</label>
-                  <select class="form-select" v-model="newAssessment.type" required>
-                    <option value="">Select Type</option>
-                    <option value="Quiz">Quiz</option>
-                    <option value="Activity">Activity</option>
-                    <option value="Performance Task">Performance Task</option>
-                  </select>
-                </div>
-
-                <!-- Assessment Number -->
-                <div class="mb-3">
-                  <label class="form-label">Number</label>
-                  <input 
-                    type="number" 
-                    class="form-control" 
-                    v-model="newAssessment.number"
-                    min="1"
-                    required
-                  >
-                </div>
-
-                <!-- Max Score -->
-                <div class="mb-3">
-                  <label class="form-label">Maximum Score</label>
-                  <input 
-                    type="number" 
-                    class="form-control" 
-                    v-model="newAssessment.maxScore"
-                    min="1"
-                    required
-                  >
-                </div>
-
-                <div class="text-end">
-                  <button type="button" class="btn btn-secondary me-2" @click="showAddAssessmentModal = false">
-                    Cancel
-                  </button>
-                  <button type="submit" class="btn btn-primary">
-                    Add Assessment
-                  </button>
-                </div>
-              </form>
-            </div>
+        <!-- Pagination Controls -->
+        <div class="pagination-controls mt-3 d-flex justify-content-between align-items-center">
+          <div class="pagination-info">
+            Showing {{ paginationInfo.start }} to {{ paginationInfo.end }} of {{ sortedStudents.length }} entries
+          </div>
+          <div class="pagination-buttons">
+            <button 
+              class="btn btn-outline-primary me-2" 
+              @click="previousPage" 
+              :disabled="currentPage === 1"
+            >
+              <i class="fas fa-chevron-left me-1"></i> Previous
+            </button>
+            <button 
+              class="btn btn-outline-primary" 
+              @click="nextPage" 
+              :disabled="currentPage >= totalPages"
+            >
+              Next <i class="fas fa-chevron-right ms-1"></i>
+            </button>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- Student Details Modal -->
-    <div v-if="selectedStudent" class="modal-overlay" @click="selectedStudent = null">
-      <div class="modal-wrapper" style="max-width: 1200px;" @click.stop>
-        <div class="modal-dialog modal-xl">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h4 class="modal-title mb-0">
-                <i class="fas fa-user-graduate me-2"></i>
-                Student Details
-              </h4>
-              <button type="button" class="btn-close" @click="selectedStudent = null"></button>
-            </div>
-            <div class="modal-body">
-              <!-- Student Information Card -->
-              <div class="student-info-card mb-4">
-                <div class="student-info-header">
-                  <i class="fas fa-info-circle me-2"></i>
-                  Student Information
-                </div>
-                <div class="student-info-content">
-                  <div class="info-grid">
-                    <div class="info-item">
-                      <label>Student Number</label>
-                      <span>{{ selectedStudent?.studentNumber }}</span>
-                    </div>
-                    <div class="info-item">
-                      <label>Name</label>
-                      <span>{{ selectedStudent?.firstName }} {{ selectedStudent?.lastName }}</span>
-                    </div>
-                    <div class="info-item">
-                      <label>Year & Section</label>
-                      <span>{{ selectedYear }} - {{ selectedSection }}</span>
-                    </div>
-                    <div class="info-item">
-                      <label>Subject</label>
-                      <span>{{ selectedSubject }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Performance Charts -->
-              <div class="performance-card mb-4">
-                <div class="performance-header">
-                  <i class="fas fa-chart-line me-2"></i>
-                  Performance Overview
-                  <div class="ms-auto d-flex gap-2">
-                    <div class="date-filter">
-                      <button class="btn btn-sm btn-outline-light" @click="openChartDateFilter">
-                        <i class="fas fa-calendar me-1"></i>
-                        {{ chartDateRange.start ? formatDate(chartDateRange.start) : 'Start' }} - 
-                        {{ chartDateRange.end ? formatDate(chartDateRange.end) : 'End' }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div class="performance-content">
-                  <div class="row">
-                    <div class="col-md-4">
-                      <div class="chart-container">
-                        <h6>Quiz Scores</h6>
-                        <canvas ref="quizChart"></canvas>
-                      </div>
-                    </div>
-                    <div class="col-md-4">
-                      <div class="chart-container">
-                        <h6>Activity Scores</h6>
-                        <canvas ref="activityChart"></canvas>
-                      </div>
-                    </div>
-                    <div class="col-md-4">
-                      <div class="chart-container">
-                        <h6>Performance Task Scores</h6>
-                        <canvas ref="performanceChart"></canvas>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Score History -->
-              <div class="history-card">
-                <div class="history-header">
-                  <i class="fas fa-history me-2"></i>
-                  Score History
-                  <div class="ms-auto d-flex gap-2">
-                    <div class="assessment-filter">
-                      <select class="form-select form-select-sm" v-model="selectedAssessmentType">
-                        <option value="">All Types</option>
-                        <option value="Quiz">Quizzes</option>
-                        <option value="Activity">Activities</option>
-                        <option value="Performance Task">Performance Tasks</option>
-                      </select>
-                    </div>
-                    <div class="date-filter">
-                      <button class="btn btn-sm btn-outline-light" @click="openHistoryDateFilter">
-                        <i class="fas fa-calendar me-1"></i>
-                        {{ historyDateRange.start ? formatDate(historyDateRange.start) : 'Start' }} - 
-                        {{ historyDateRange.end ? formatDate(historyDateRange.end) : 'End' }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div class="history-content">
-                  <div class="table-responsive">
-                    <table class="table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Type</th>
-                          <th>Assessment</th>
-                          <th>Score</th>
-                          <th>Max Score</th>
-                          <th>Percentage</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="assessment in filteredAssessments" :key="assessment.id">
-                          <td>{{ formatDate(assessment.date) }}</td>
-                          <td>
-                            <span :class="'badge ' + getAssessmentBadgeClass(assessment.type)">
-                              {{ assessment.type }}
-                            </span>
-                          </td>
-                          <td>{{ assessment.number }}</td>
-                          <td>{{ assessment.scores[selectedStudent?.studentNumber] || 0 }}</td>
-                          <td>{{ assessment.maxScore }}</td>
-                          <td>
-                            <span :class="getScoreClass((assessment.scores[selectedStudent?.studentNumber] || 0) / assessment.maxScore * 100)">
-                              {{ ((assessment.scores[selectedStudent?.studentNumber] || 0) / assessment.maxScore * 100).toFixed(1) }}%
-                            </span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Attendance Chart -->
-              <div class="col-md-6">
-                <!-- Attendance information removed -->
-              </div>
-
-              <!-- Attendance History -->
-              <div class="col-12">
-                <!-- Attendance information removed -->
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Chart Date Filter Modal -->
-    <teleport to="body" v-if="showChartDateFilter">
-      <div class="modal-overlay">
-        <div class="modal-wrapper">
-          <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h5 class="modal-title">Filter Chart Date Range</h5>
-                <button type="button" class="btn-close" @click="showChartDateFilter = false"></button>
-              </div>
-              <div class="modal-body">
-                <div class="mb-3">
-                  <label class="form-label">Start Date</label>
-                  <input type="date" class="form-control" v-model="chartDateRange.start">
-                </div>
-                <div class="mb-3">
-                  <label class="form-label">End Date</label>
-                  <input type="date" class="form-control" v-model="chartDateRange.end">
-                </div>
-                <div class="text-end">
-                  <button class="btn btn-secondary me-2" @click="clearChartDateFilter">Clear</button>
-                  <button class="btn btn-primary" @click="applyChartDateFilter">Apply</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-backdrop" @click="showChartDateFilter = false"></div>
-      </div>
-    </teleport>
-
-    <!-- History Date Filter Modal -->
-    <teleport to="body" v-if="showHistoryDateFilter">
-      <div class="modal-overlay">
-        <div class="modal-wrapper">
-          <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h5 class="modal-title">Filter History Date Range</h5>
-                <button type="button" class="btn-close" @click="showHistoryDateFilter = false"></button>
-              </div>
-              <div class="modal-body">
-                <div class="mb-3">
-                  <label class="form-label">Start Date</label>
-                  <input type="date" class="form-control" v-model="historyDateRange.start">
-                </div>
-                <div class="mb-3">
-                  <label class="form-label">End Date</label>
-                  <input type="date" class="form-control" v-model="historyDateRange.end">
-                </div>
-                <div class="text-end">
-                  <button class="btn btn-secondary me-2" @click="clearHistoryDateFilter">Clear</button>
-                  <button class="btn btn-primary" @click="applyHistoryDateFilter">Apply</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-backdrop" @click="showHistoryDateFilter = false"></div>
-      </div>
-    </teleport>
 
     <!-- Add Student Record Modal -->
     <div v-if="showAddStudentRecordModal" class="modal-overlay">
@@ -530,28 +266,249 @@
           </div>
         </div>
       </div>
+      <div class="modal-backdrop" @click="showAddStudentRecordModal = false"></div>
     </div>
+
+    <!-- Add Assessment Modal -->
+    <div v-if="showAddAssessmentModal" class="modal-overlay">
+      <div class="modal-wrapper">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Add Assessment</h5>
+              <button type="button" class="btn-close" @click="showAddAssessmentModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="handleAddAssessment">
+                <!-- Assessment Type -->
+                <div class="mb-3">
+                  <label class="form-label">Type</label>
+                  <select class="form-select" v-model="newAssessment.type" required>
+                    <option value="">Select Type</option>
+                    <option value="Quiz">Quiz</option>
+                    <option value="Activity">Activity</option>
+                    <option value="Performance Task">Performance Task</option>
+                  </select>
+                </div>
+
+                <!-- Assessment Number -->
+                <div class="mb-3">
+                  <label class="form-label">Number</label>
+                  <input 
+                    type="number" 
+                    class="form-control" 
+                    v-model="newAssessment.number"
+                    min="1"
+                    required
+                  >
+                </div>
+
+                <!-- Max Score -->
+                <div class="mb-3">
+                  <label class="form-label">Maximum Score</label>
+                  <input 
+                    type="number" 
+                    class="form-control" 
+                    v-model="newAssessment.maxScore"
+                    min="1"
+                    required
+                  >
+                </div>
+
+                <div class="text-end">
+                  <button type="button" class="btn btn-secondary me-2" @click="showAddAssessmentModal = false">
+                    Cancel
+                  </button>
+                  <button type="submit" class="btn btn-primary">
+                    Add Assessment
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="showAddAssessmentModal = false"></div>
+    </div>
+
+    <!-- Student Details Modal -->
+    <StudentDetailsModal
+      :show="!!selectedStudent"
+      :student="selectedStudent || {}"
+      :year-level="selectedYear"
+      :section="selectedSection"
+      :subject="selectedSubject"
+      title="Student Performance Details"
+      chart-title="Assessment Performance"
+      history-title="Assessment History"
+      :table-headers="['Date', 'Assessment', 'Score', 'Percentage']"
+      :chart-id="`performanceChart-${selectedStudent?.studentNumber}`"
+      :is-class-record="true"
+      @update:show="(value) => !value && (selectedStudent = null)"
+      @close="selectedStudent = null"
+      @date-filter-change="handleDateFilterChange"
+      @assessment-type-change="handleAssessmentTypeChange"
+    >
+      <template #history-table>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Assessment</th>
+              <th>Score</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!selectedStudent?.assessmentHistory || selectedStudent.assessmentHistory.length === 0">
+              <td colspan="4" class="text-center py-3 text-muted">
+                <i class="fas fa-info-circle me-2"></i>No assessment records found.
+              </td>
+            </tr>
+            <tr v-for="record in selectedStudent?.assessmentHistory" :key="record.date + record.type">
+              <td>{{ formatDate(record.date) }}</td>
+              <td>{{ record.type }}</td>
+              <td>{{ record.score }}/{{ record.maxScore }}</td>
+              <td>
+                <span 
+                  class="badge"
+                  :class="{
+                    'bg-success': record.percentage >= 90,
+                    'bg-primary': record.percentage >= 80 && record.percentage < 90,
+                    'bg-warning': record.percentage >= 75 && record.percentage < 80,
+                    'bg-danger': record.percentage < 75
+                  }"
+                >
+                  {{ record.percentage.toFixed(1) }}%
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+    </StudentDetailsModal>
+
+    <!-- Chart Date Filter Modal -->
+    <teleport to="body" v-if="showChartDateFilter">
+      <div class="modal-overlay">
+        <div class="modal-wrapper">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Filter Chart Date Range</h5>
+                <button type="button" class="btn-close" @click="showChartDateFilter = false"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label">Start Date</label>
+                  <input type="date" class="form-control" v-model="chartDateRange.start">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">End Date</label>
+                  <input type="date" class="form-control" v-model="chartDateRange.end">
+                </div>
+                </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @click="clearChartDateFilter">Clear</button>
+                <button type="button" class="btn btn-primary" @click="applyChartDateFilter">Apply</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop" @click="showChartDateFilter = false"></div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- History Date Filter Modal -->
+    <teleport to="body" v-if="showHistoryDateFilter">
+      <div class="modal-overlay">
+        <div class="modal-wrapper">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Filter History Date Range</h5>
+                <button type="button" class="btn-close" @click="showHistoryDateFilter = false"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label">Start Date</label>
+                  <input type="date" class="form-control" v-model="historyDateRange.start">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">End Date</label>
+                  <input type="date" class="form-control" v-model="historyDateRange.end">
+                </div>
+                </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @click="clearHistoryDateFilter">Clear</button>
+                <button type="button" class="btn btn-primary" @click="applyHistoryDateFilter">Apply</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop" @click="showHistoryDateFilter = false"></div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useStore } from 'vuex'
+import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
+import moment from 'moment-timezone'
 import Chart from 'chart.js/auto'
-import moment from 'moment'
-import { useRouter } from 'vue-router'
+import 'chartjs-adapter-moment'
+import StudentDetailsModal from '@/components/modals/StudentDetailsModal.vue'
 
 // Create axios instance with base URL
 const api = axios.create({
   baseURL: 'http://localhost:8000/api',
   headers: {
     'Content-Type': 'application/json'
+  },
+  timeout: 10000, // 10 seconds timeout
+  validateStatus: function (status) {
+    return status >= 200 && status < 500; // Accept all status codes from 200-499
   }
 });
 
+// Add request interceptor for logging
+api.interceptors.request.use(
+  config => {
+    console.log(`API Request: ${config.method.toUpperCase()} ${config.url}`, config.data || config.params);
+    return config;
+  },
+  error => {
+    console.error('API Request Error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor for logging
+api.interceptors.response.use(
+  response => {
+    console.log(`API Response: ${response.status} ${response.config.url}`, response.data);
+    return response;
+  },
+  error => {
+    if (error.response) {
+      console.error(`API Error Response: ${error.response.status} ${error.config?.url}`, error.response.data);
+    } else if (error.request) {
+      console.error('API No Response:', error.request);
+    } else {
+      console.error('API Error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default {
   name: 'ClassRecords',
+  components: {
+    StudentDetailsModal
+  },
   setup() {
     const store = useStore()
     const router = useRouter()
@@ -597,48 +554,102 @@ export default {
       try {
         console.log('Component mounted, fetching user profile and subjects');
         await fetchUserProfile();
-        console.log('User profile fetched, now fetching teacher subjects');
-        await fetchTeacherSubjects();
+        console.log('User profile fetched, now fetching user preferences');
+        
+        // First check localStorage for preferences
+        const localPrefs = localStorage.getItem('classRecordPreferences');
+        if (localPrefs) {
+          try {
+            const prefs = JSON.parse(localPrefs);
+            console.log('Found preferences in localStorage:', prefs);
+            
+            // Apply local preferences immediately
+            if (prefs.selectedYear) selectedYear.value = prefs.selectedYear;
+            if (prefs.selectedSection) selectedSection.value = prefs.selectedSection;
+            if (prefs.selectedSubject) selectedSubject.value = prefs.selectedSubject;
+            if (prefs.currentPage) currentPage.value = parseInt(prefs.currentPage) || 1;
+          } catch (parseError) {
+            console.error('Error parsing localStorage preferences:', parseError);
+          }
+        } else {
+          // If no preferences in localStorage, try to load last used filters
+          await loadLastUsedFilters();
+        }
+        
+        // Then fetch from API
+        await fetchUserPreferences();
+        
+        // Ensure we have the necessary data to fetch records
+        if (selectedYear.value && selectedSection.value && selectedSubject.value) {
+          console.log('Fetching available sections for year:', selectedYear.value);
+          await fetchAvailableSections();
+          
+          console.log('Updating teacher subjects for section:', selectedSection.value);
+          await updateTeacherSubjects();
+          
+          console.log('Fetching class data for subject:', selectedSubject.value);
+          await fetchClassData();
+        } else {
+          console.log('Missing required filters, cannot fetch class data');
+          // Try to load last used filters if we still don't have them
+          if (!selectedYear.value || !selectedSection.value || !selectedSubject.value) {
+            await loadLastUsedFilters();
+            
+            // Try again with the loaded filters
+            if (selectedYear.value) {
+              await fetchAvailableSections();
+              
+              if (selectedSection.value) {
+                await updateTeacherSubjects();
+                
+                if (selectedSubject.value) {
+                  await fetchClassData();
+                }
+              }
+            }
+          }
+        }
+        
         console.log('Initial data loading complete');
       } catch (error) {
         console.error('Error during component initialization:', error);
       }
     });
 
-    const selectedYear = ref(localStorage.getItem('selectedYear') || '')
-    const selectedSection = ref(localStorage.getItem('selectedSection') || '')
-    const selectedSubject = ref(localStorage.getItem('selectedSubject') || '')
-    const searchQuery = ref('')
-    const students = ref([])
-    const assessments = ref([])
-    const currentDate = ref(moment().tz('Asia/Manila').startOf('day').toDate())
-    const showAddAssessmentModal = ref(false)
-    const selectedStudent = ref(null)
-    const quizChart = ref(null)
-    const activityChart = ref(null)
-    const performanceChart = ref(null)
-    const showAddStudentRecordModal = ref(false)
-    const showSearch = ref(false)
-    const sortField = ref('')
-    const sortOrder = ref('asc')
+    const selectedYear = ref('');
+    const selectedSection = ref('');
+    const selectedSubject = ref('');
+    const searchQuery = ref('');
+    const students = ref([]);
+    const assessments = ref([]);
+    const currentDate = ref(moment().tz('Asia/Manila').startOf('day').toDate());
+    const showAddAssessmentModal = ref(false);
+    const selectedStudent = ref(null);
+    const quizChart = ref(null);
+    const activityChart = ref(null);
+    const performanceChart = ref(null);
+    const showAddStudentRecordModal = ref(false);
+    const showSearch = ref(false);
+    const sortField = ref('');
+    const sortOrder = ref('asc');
     const newStudentRecord = ref({
       year: '',
       section: '',
       subject: ''
-    })
+    });
 
     // Add new refs for filters
-    const selectedAssessmentType = ref('')
-    const showChartDateFilter = ref(false)
-    const showHistoryDateFilter = ref(false)
+    const selectedAssessmentType = ref('');
+    const showChartDateFilter = ref(false);
+    const showHistoryDateFilter = ref(false);
     const chartDateRange = ref({
-      start: '',
-      end: ''
-    })
+      start: moment().subtract(30, 'days').format('YYYY-MM-DD'),
+      end: moment().format('YYYY-MM-DD')
+    });
     const historyDateRange = ref({
-      start: '',
-      end: ''
-    })
+      start: moment().subtract(30, 'days').format('YYYY-MM-DD'),
+      end: moment().format('YYYY-MM-DD')
+    });
 
     const newAssessment = ref({
       type: '',
@@ -739,31 +750,104 @@ export default {
 
     // Filter functions
     const applyFilters = async () => {
-      console.log('Applying filters:', {
-        year: selectedYear.value,
-        section: selectedSection.value,
-        subject: selectedSubject.value
-      })
-      
-      // Reset subject when year or section changes
-      if (!selectedYear.value || !selectedSection.value) {
-        selectedSubject.value = ''
-        availableSubjects.value = []
+      try {
+        console.log('Applying filters:', {
+          year: selectedYear.value,
+          section: selectedSection.value,
+          subject: selectedSubject.value
+        });
+        
+        // Save the applied filters as preferences first
+        await saveUserPreferences();
+        
+        // Save to recent filters
+        if (selectedYear.value && selectedSection.value && selectedSubject.value) {
+          saveToRecentFilters({
+            year: selectedYear.value,
+            section: selectedSection.value,
+            subject: selectedSubject.value,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Record the timestamp for this filter combination
+        try {
+          const token = store.state.auth.token;
+          const userId = store.state.auth.user?._id;
+          
+          if (userId && selectedYear.value && selectedSection.value && selectedSubject.value) {
+            await api.post('/users/record-filter-usage', {
+              userId,
+              year: selectedYear.value,
+              section: selectedSection.value,
+              subject: selectedSubject.value,
+              timestamp: new Date().toISOString()
+            }, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            console.log('Filter usage recorded');
+          }
+        } catch (recordError) {
+          console.error('Error recording filter usage:', recordError);
+          // Non-critical error, continue with the rest of the function
+        }
+        
+        // Always fetch data when filters are applied, regardless of whether all filters are selected
+        await fetchClassData();
+        
+        // Only fetch assessments if we have all the necessary filters
+        if (selectedYear.value && selectedSection.value && selectedSubject.value) {
+          await fetchAssessments();
+        }
+      } catch (error) {
+        console.error('Error applying filters:', error);
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
+        
+        // Try to recover by using localStorage values
+        try {
+          const localPrefs = localStorage.getItem('classRecordPreferences');
+          if (localPrefs) {
+            const prefs = JSON.parse(localPrefs);
+            console.log('Recovering with localStorage preferences:', prefs);
+            
+            // Only update if values are different to avoid infinite loops
+            let changed = false;
+            
+            if (prefs.selectedYear && prefs.selectedYear !== selectedYear.value) {
+              selectedYear.value = prefs.selectedYear;
+              changed = true;
+            }
+            
+            if (prefs.selectedSection && prefs.selectedSection !== selectedSection.value) {
+              selectedSection.value = prefs.selectedSection;
+              changed = true;
+            }
+            
+            if (prefs.selectedSubject && prefs.selectedSubject !== selectedSubject.value) {
+              selectedSubject.value = prefs.selectedSubject;
+              changed = true;
+            }
+            
+            // If we made changes, try to fetch data again
+            if (changed) {
+              console.log('Recovered with localStorage values, fetching data again');
+              await fetchClassData();
+              
+              if (selectedYear.value && selectedSection.value && selectedSubject.value) {
+                await fetchAssessments();
+              }
+            }
+          }
+        } catch (recoveryError) {
+          console.error('Failed to recover with localStorage:', recoveryError);
+        }
       }
-      
-      // Fetch available subjects when year and section are selected
-      if (selectedYear.value && selectedSection.value) {
-        await updateTeacherSubjects()
-      }
-      
-      // Fetch students and assessments if all filters are selected
-      if (selectedYear.value && selectedSection.value && selectedSubject.value) {
-        await Promise.all([
-          fetchClassData(),
-          fetchAssessments()
-        ])
-      }
-    }
+    };
 
     // Computed property to check if record can be added
     const canAddStudentRecord = computed(() => {
@@ -774,63 +858,73 @@ export default {
 
     // Fetch class data
     const fetchClassData = async () => {
-      if (!selectedYear.value || !selectedSection.value || !selectedSubject.value) {
-        console.log('fetchClassData: Missing required filters', {
-          year: selectedYear.value,
-          section: selectedSection.value,
-          subject: selectedSubject.value
-        });
-        return;
-      }
-
       try {
-        console.log('fetchClassData: Fetching data with filters', {
+        if (!selectedYear.value || !selectedSection.value || !selectedSubject.value) {
+          console.log('Missing required filters for fetchClassData:', {
+            year: selectedYear.value || 'missing',
+            section: selectedSection.value || 'missing',
+            subject: selectedSubject.value || 'missing'
+          });
+          students.value = [];
+          return;
+        }
+
+        // Create a params object with the teacher ID
+        const teacherId = store.state.auth.user?._id;
+        if (!teacherId) {
+          console.error('Teacher ID not available');
+          return;
+        }
+        
+        const params = { 
+          teacherId,
           year: selectedYear.value,
           section: selectedSection.value,
           subject: selectedSubject.value
-        });
-        const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id || user.value?._id
-
-        if (!teacherId) {
-          console.error('Teacher ID is not available')
-          return
-        }
-
-        const response = await api.get('/teacher-class-records', {
-          params: {
-            teacherId,
-            year: selectedYear.value,
-            section: selectedSection.value,
-            subject: selectedSubject.value
-          },
+        };
+        
+        console.log('Fetching class data with filters:', params);
+        
+        // Make the API call with the available filters
+        const response = await api.get('/teacher-class-records/students', { 
+          params,
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${store.state.auth.token}`
           }
-        })
-
-        if (response.data && response.data.length > 0) {
-          const record = response.data[0]
-          students.value = record.students.map(student => ({
+        });
+        
+        if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
+          console.log('No students found for the selected filters');
+          students.value = [];
+          return;
+        }
+        
+        // Map the students and initialize scores
+        students.value = response.data.map(student => ({
             ...student,
-            scores: student.scores || {},
-            assessments: student.assessments || []
-          }))
-          assessments.value = record.assessments || []
-        } else {
-          students.value = []
-          assessments.value = []
-        }
+          scores: {}
+        }));
+
+        // Fetch assessments after loading students
+        await fetchAssessments();
+
+        console.log('Fetched students:', students.value.length);
       } catch (error) {
-        console.error('Failed to fetch class data:', error)
-        if (error.response?.status === 401) {
-          store.dispatch('logout')
-          router.push('/login')
-        } else {
-          alert('Failed to fetch class data. Please try again.')
+        console.error('Failed to fetch class data:', error);
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
+        
+        // Don't show alert for every error to avoid overwhelming the user
+        if (error.response?.status !== 400) {
+        alert('Failed to load class data. Please try again.');
         }
+        
+        students.value = [];
       }
-    }
+    };
 
     // Handle adding new assessment
     const handleAddAssessment = async () => {
@@ -884,161 +978,378 @@ export default {
       }
     };
 
-    // Fetch assessments for the current section and subject
+    // Update the fetchAssessments function
     const fetchAssessments = async () => {
       try {
-        if (!selectedSection.value || !selectedSubject.value) return;
+        if (!selectedSection.value || !selectedSubject.value) {
+          console.log('Missing required filters for fetching assessments');
+          return;
+        }
 
         const teacherId = store.state.auth.user?._id || user.value?._id;
+        const date = moment(currentDate.value).format('YYYY-MM-DD');
+        
+        console.log('Fetching assessments for:', {
+          teacherId,
+          section: selectedSection.value,
+          subject: selectedSubject.value,
+          date
+        });
+
+        // Show loading indicator
+        const loadingToast = showToast('Loading assessments...', 'info', 0);
+
         const response = await api.get('/assessments', {
           params: {
             teacherId,
             section: selectedSection.value,
-            subject: selectedSubject.value
+            subject: selectedSubject.value,
+            date
           },
           headers: {
             'Authorization': `Bearer ${store.state.auth.token}`
           }
         });
 
-        // Map the assessments and initialize scores
-        assessments.value = response.data.map(assessment => ({
-          ...assessment,
-          id: assessment._id
-        }));
+        // Hide loading indicator
+        hideToast(loadingToast);
 
-        // Initialize scores for all students
-        students.value.forEach(student => {
-          if (!student.scores) {
-            student.scores = {};
+        if (!response.data || !Array.isArray(response.data)) {
+          console.error('Invalid response data:', response.data);
+          showToast('Failed to load assessments', 'error', 3000);
+          return;
+        }
+
+        console.log(`Loaded ${response.data.length} assessments`);
+
+        // Sort assessments by date and type
+        const sortedAssessments = response.data.sort((a, b) => {
+          // First sort by date
+          const dateA = new Date(a.date);
+          const dateB = new Date(b.date);
+          if (dateA.getTime() !== dateB.getTime()) {
+            return dateA - dateB;
           }
-          assessments.value.forEach(assessment => {
-            if (!student.scores[assessment.id]) {
-              // Only set score if it exists in the assessment scores
-              student.scores[assessment.id] = assessment.scores?.[student.studentNumber] || null;
-            }
-          });
+          
+          // If dates are equal, sort by type
+          const typeOrder = { 'Quiz': 1, 'Activity': 2, 'Performance Task': 3 };
+          if (typeOrder[a.type] !== typeOrder[b.type]) {
+            return typeOrder[a.type] - typeOrder[b.type];
+          }
+          
+          // If types are equal, sort by number
+          return a.number - b.number;
         });
 
-        console.log('Fetched assessments:', assessments.value);
+        // Map the assessments and initialize scores
+        assessments.value = sortedAssessments.map(assessment => {
+          // Create a title if it doesn't exist
+          const title = assessment.title || `${assessment.type} ${assessment.number}`;
+          
+          return {
+            ...assessment,
+            id: assessment._id,
+            title,
+            scores: assessment.scores || {},
+            date: assessment.date ? new Date(assessment.date) : new Date()
+          };
+        });
+
+        console.log('Processed assessments:', assessments.value);
+
+        // If a student is selected, update their assessment data
+        if (selectedStudent.value) {
+          await viewStudentDetails(selectedStudent.value);
+        }
+
+        // Show success message if assessments were loaded
+        if (assessments.value.length > 0) {
+          showToast(`Loaded ${assessments.value.length} assessments`, 'success', 2000);
+        } else {
+          showToast('No assessments found for the selected filters', 'info', 3000);
+        }
       } catch (error) {
-        console.error('Failed to fetch assessments:', error);
-        alert('Failed to load assessments. Please try again.');
+        console.error('Error fetching assessments:', error);
+        showToast('Failed to load assessments: ' + (error.message || 'Unknown error'), 'error', 3000);
       }
     };
 
+    // Update the computed property for filtered assessments
+    const filteredAssessmentsByDate = computed(() => {
+      return assessments.value.filter(assessment => {
+        const assessmentDate = new Date(assessment.date);
+        const currentDateStart = new Date(currentDate.value);
+        currentDateStart.setUTCHours(0, 0, 0, 0);
+        currentDateStart.setHours(currentDateStart.getHours() + 8); // Adjust for Philippine timezone
+        
+        const currentDateEnd = new Date(currentDate.value);
+        currentDateEnd.setUTCHours(23, 59, 59, 999);
+        currentDateEnd.setHours(currentDateEnd.getHours() + 8); // Adjust for Philippine timezone
+        
+        return assessmentDate >= currentDateStart && assessmentDate <= currentDateEnd;
+      }).sort((a, b) => {
+        // Sort by type first
+        const typeOrder = { 'Quiz': 1, 'Activity': 2, 'Performance Task': 3 };
+        if (typeOrder[a.type] !== typeOrder[b.type]) {
+          return typeOrder[a.type] - typeOrder[b.type];
+        }
+        
+        // Then by number
+        return a.number - b.number;
+      });
+    });
+
+    // Add watcher for currentDate to refresh assessments
+    watch(currentDate, async () => {
+      await fetchAssessments();
+    });
+
     // Update student score
-    const updateScore = async (student, assessment) => {
+    const updateScore = async (student, assessment, inputValue) => {
       try {
         const token = store.state.auth.token;
-        const teacherId = store.state.auth.user?._id || user.value?._id;
-        const score = parseFloat(student.scores[assessment.id]);
+        const teacherId = store.state.auth.user?._id;
 
+        if (!teacherId) {
+          console.error('Teacher ID not available');
+          showToast('Teacher ID not available. Please log in again.', 'error', 3000);
+          return;
+        }
+
+        // Get the assessment ID
+        const assessmentId = assessment._id || assessment.id;
+        
+        if (!assessmentId) {
+          console.error('Assessment ID not available');
+          showToast('Assessment ID not available. Please try again.', 'error', 3000);
+          return;
+        }
+
+        // Get the score from the input field or parameter
+        let scoreValue = inputValue;
+        if (scoreValue === undefined) {
+          scoreValue = student.scores?.[assessmentId];
+        }
+        
         // Validate score
-        if (score === null || isNaN(score) || score === undefined || score === '') {
-          student.scores[assessment.id] = null;
-          return;
+        if (scoreValue === null || scoreValue === '') {
+          // Handle empty score
+          scoreValue = null;
+          console.log(`Removing score for student ${student.studentNumber}, assessment ${assessmentId}`);
+        } else {
+          const scoreNum = parseInt(scoreValue);
+          if (isNaN(scoreNum) || scoreNum < 0 || scoreNum > assessment.maxScore) {
+            showToast(`Please enter a valid score between 0 and ${assessment.maxScore}`, 'error', 3000);
+            return;
+          }
+          scoreValue = scoreNum; // Ensure it's a number
         }
 
-        if (score < 0 || score > assessment.maxScore) {
-          alert(`Score must be between 0 and ${assessment.maxScore}`);
-          student.scores[assessment.id] = null;
-          return;
-        }
+        console.log(`Updating score for student ${student.studentNumber}, assessment ${assessmentId}: ${scoreValue}`);
 
-        console.log('Updating score with data:', {
+        // Create the request payload for the new endpoint
+        const payload = {
+          assessmentId,
           teacherId,
           studentNumber: student.studentNumber,
-          assessmentId: assessment._id || assessment.id,
-          score
-        });
+          score: scoreValue
+        };
 
-        // Update score in the assessments collection
-        const assessmentResponse = await api.put(
-          '/assessments/score',
-          {
-            teacherId,
-            studentNumber: student.studentNumber,
-            assessmentId: assessment._id || assessment.id,
-            score
-          },
+        console.log('Sending score update request with payload:', payload);
+
+        // Show loading indicator
+        const loadingToast = showToast('Updating score...', 'info', 0);
+
+        // Use the new direct score update endpoint
+        const response = await api.post(
+          `/assessments/update-score-direct`,
+          payload,
           {
             headers: {
-              'Authorization': `Bearer ${token}`
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
             }
           }
         );
 
-        if (!assessmentResponse.data) {
-          throw new Error('Failed to update score');
+        // Hide loading indicator
+        hideToast(loadingToast);
+
+        console.log('Score update response:', response.data);
+
+        if (!response.data || !response.data.success) {
+          console.error('Error updating score:', response.data?.message || 'Unknown error');
+          showToast(response.data?.message || 'Failed to update score', 'error', 3000);
+          return;
         }
 
+        // Show success message
+        showToast('Score updated successfully', 'success', 2000);
+
         // Update the local assessment scores
-        const updatedAssessment = assessmentResponse.data.assessment;
+        const updatedAssessment = response.data.assessment;
+        
+        if (!updatedAssessment) {
+          console.error('No assessment returned from server');
+          return;
+        }
+        
+        console.log('Updated assessment:', updatedAssessment);
+        console.log('Updated scores:', updatedAssessment.scores);
+        
+        // Find the assessment in the local array
         const assessmentIndex = assessments.value.findIndex(a => 
-          a._id === (assessment._id || assessment.id)
+          a._id === assessmentId || a.id === assessmentId
         );
         
         if (assessmentIndex !== -1) {
-          // Update the assessment in the array
+          // Update the assessment in the array with the new scores
           assessments.value[assessmentIndex] = {
-            ...updatedAssessment,
-            id: updatedAssessment._id
+            ...assessments.value[assessmentIndex],
+            scores: updatedAssessment.scores || {}
           };
 
-          // Ensure the student's scores are updated
-          if (!student.scores) {
-            student.scores = {};
+          // Force a UI update
+          assessments.value = [...assessments.value];
+          
+          // Update the student's scores in the UI
+          if (students.value) {
+            const studentIndex = students.value.findIndex(s => 
+              s.studentNumber === student.studentNumber
+            );
+            
+            if (studentIndex !== -1) {
+              // Make sure the scores object exists
+              if (!students.value[studentIndex].scores) {
+                students.value[studentIndex].scores = {};
+              }
+              
+              // Update the score
+              students.value[studentIndex].scores[assessmentId] = scoreValue;
+              
+              // Force a UI update
+              students.value = [...students.value];
+            }
           }
-          student.scores[assessment.id] = score;
+          
+          // If the student is currently selected in the details modal, update their chart
+          if (selectedStudent.value && selectedStudent.value.studentNumber === student.studentNumber) {
+            // Update the chart on the next tick to ensure the DOM is updated
+            nextTick(() => {
+              createPerformanceChart();
+              updateAssessmentHistoryTable();
+            });
+          }
         }
-
-        // Update the student's assessment history
-        if (!student.assessments) {
-          student.assessments = [];
-        }
-
-        const assessmentRecord = {
-          id: assessment._id || assessment.id,
-          type: assessment.type,
-          number: assessment.number,
-          score: score,
-          maxScore: assessment.maxScore,
-          date: new Date().toISOString()
-        };
-
-        const existingIndex = student.assessments.findIndex(a => 
-          a.id === (assessment._id || assessment.id)
-        );
-        
-        if (existingIndex !== -1) {
-          student.assessments[existingIndex] = assessmentRecord;
-        } else {
-          student.assessments.push(assessmentRecord);
-        }
-
-        // If this student is currently selected, update their details view
-        if (selectedStudent.value && selectedStudent.value.studentNumber === student.studentNumber) {
-          selectedStudent.value = {
-            ...student,
-            assessments: student.assessments
-          };
-        }
-
-        console.log('Score updated successfully');
       } catch (error) {
-        console.error('Failed to update score:', error);
-        alert('Failed to update score. Please try again.');
-        // Refresh data to ensure UI is in sync with database
-        await fetchAssessments();
+        console.error('Error updating score:', error);
+        showToast('Failed to update score. Please try again.', 'error', 3000);
       }
+    };
+    
+    // Helper function to show toast messages
+    const showToast = (message, type = 'info', duration = 3000) => {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = message;
+      document.body.appendChild(toast);
+      
+      // Add styles if they don't exist
+      if (!document.getElementById('toast-styles')) {
+        const style = document.createElement('style');
+        style.id = 'toast-styles';
+        style.innerHTML = `
+          .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            animation: toast-in 0.3s ease-out;
+          }
+          .toast-info {
+            background-color: #3498db;
+          }
+          .toast-success {
+            background-color: #2ecc71;
+          }
+          .toast-warning {
+            background-color: #f39c12;
+          }
+          .toast-error {
+            background-color: #e74c3c;
+          }
+          @keyframes toast-in {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+      
+      // Remove toast after duration (if not 0)
+      if (duration > 0) {
+        setTimeout(() => {
+          hideToast(toast);
+        }, duration);
+      }
+      
+      return toast;
+    };
+    
+    // Helper function to hide toast
+    const hideToast = (toast) => {
+      if (!toast || !document.body.contains(toast)) return;
+      
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-20px)';
+      toast.style.transition = 'all 0.3s ease-out';
+      
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 300);
     };
 
     // View student details
     const viewStudentDetails = async (student) => {
       try {
-        // Get all assessments for this student's section and subject
-        const assessmentsResponse = await api.get('/assessments', {
+        if (!student) {
+          console.error('Invalid student data provided to viewStudentDetails');
+          return;
+        }
+
+        // Clean up existing charts if any
+        if (selectedStudent.value) {
+          const chartIdBase = `performanceChart-${selectedStudent.value.studentNumber}`;
+          const chartIds = [
+            `all-${chartIdBase}`,
+            `quiz-${chartIdBase}`,
+            `activity-${chartIdBase}`,
+            `performance-${chartIdBase}`
+          ];
+          
+          chartIds.forEach(id => {
+            const chartElement = document.getElementById(id);
+            if (chartElement) {
+              const chart = Chart.getChart(chartElement);
+              if (chart) {
+                chart.destroy();
+              }
+            }
+          });
+        }
+
+        // Reset assessment type to 'All'
+        selectedAssessmentType.value = 'All';
+
+        // Get all assessments for this student
+        const response = await api.get('/assessments', {
           params: {
             teacherId: store.state.auth.user?._id,
             section: selectedSection.value,
@@ -1049,38 +1360,38 @@ export default {
           }
         });
 
-        // Map the assessments to include scores and use date field
-        const studentAssessments = assessmentsResponse.data.map(assessment => ({
+        if (!response.data) {
+          throw new Error('Failed to fetch assessment data');
+        }
+
+        // Map the assessments to include scores
+        const assessmentsData = response.data.map(assessment => ({
+          ...assessment,
           id: assessment._id,
-          type: assessment.type,
-          number: assessment.number,
-          maxScore: assessment.maxScore,
-          date: assessment.date,
-          scores: assessment.scores || {},
+          scores: assessment.scores || {}
         }));
 
-        // Update the selected student with the fetched assessments
+        // Update the selected student with assessment data
         selectedStudent.value = {
           ...student,
-          assessments: studentAssessments
+          assessments: assessmentsData
         };
 
-        // Set both chart and history date ranges to match the current table date
-        const currentTableDate = currentDate.value.toISOString().split('T')[0];
+        // Set default date ranges if not already set
+        const today = moment().format('YYYY-MM-DD');
+        const thirtyDaysAgo = moment().subtract(30, 'days').format('YYYY-MM-DD');
+        
         chartDateRange.value = {
-          start: currentTableDate,
-          end: currentTableDate
+          start: thirtyDaysAgo,
+          end: today
         };
+        
         historyDateRange.value = {
-          start: currentTableDate,
-          end: currentTableDate
+          start: thirtyDaysAgo,
+          end: today
         };
 
-        // Apply the date filters immediately
-        applyChartDateFilter();
-        applyHistoryDateFilter();
-
-        // Create performance chart
+        // Create charts on next tick to ensure DOM is ready
         nextTick(() => {
           createPerformanceChart();
         });
@@ -1106,33 +1417,38 @@ export default {
     // Function to update teacher subjects
     const updateTeacherSubjects = async () => {
       try {
-        const token = store.state.auth.token
-        const teacherId = store.state.auth.user?._id
-
-        if (!teacherId || !selectedYear.value || !selectedSection.value) {
-          teacherSubjects.value = []
-          return
+        if (!selectedYear.value || !selectedSection.value) {
+          console.log('Missing year or section for fetching subjects');
+          teacherSubjects.value = [];
+          return;
         }
 
+        const teacherId = store.state.auth.user?._id;
         const response = await api.get('/teacher-class-records/available-subjects', {
           params: {
             teacherId,
             year: selectedYear.value,
             section: selectedSection.value
           },
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+          headers: { 
+            'Authorization': `Bearer ${store.state.auth.token}` 
+          }
+        });
 
         if (response.data && response.data.subjects) {
-          teacherSubjects.value = response.data.subjects.sort()
+          teacherSubjects.value = response.data.subjects.sort();
+          console.log('Fetched teacher subjects:', teacherSubjects.value);
 
           // If no subject is selected but we have subjects available, select the first one
           if (!selectedSubject.value && teacherSubjects.value.length > 0) {
-            selectedSubject.value = teacherSubjects.value[0]
+            selectedSubject.value = teacherSubjects.value[0];
           }
+        } else {
+          teacherSubjects.value = [];
         }
       } catch (error) {
-        console.error('Failed to fetch teacher subjects:', error)
+        console.error('Failed to fetch teacher subjects:', error);
+        teacherSubjects.value = [];
       }
     }
 
@@ -1380,53 +1696,73 @@ export default {
       if (newYear) {
         selectedSection.value = ''; // Reset section
         selectedSubject.value = ''; // Reset subject
-        localStorage.setItem('selectedYear', newYear);
         await fetchAvailableSections(); // Fetch sections based on selected year
+        await saveUserPreferences(); // Save the updated preference
       } else {
         availableSections.value = [];
-        teacherSubjects.value = [];
-        localStorage.removeItem('selectedYear');
       }
-    })
+    });
 
     // Watch for changes in section selection
     watch(selectedSection, async (newSection) => {
       if (newSection) {
         selectedSubject.value = ''; // Reset subject
-        localStorage.setItem('selectedSection', newSection);
-        await updateTeacherSubjects(); // Fetch subjects based on selected section
+        await updateTeacherSubjects(); // Fetch subjects based on selected year and section
+        await saveUserPreferences(); // Save the updated preference
       } else {
         teacherSubjects.value = [];
-        localStorage.removeItem('selectedSection');
       }
-    })
+    });
 
     // Watch for changes in subject selection
     watch(selectedSubject, async (newSubject) => {
       if (newSubject) {
-        localStorage.setItem('selectedSubject', newSubject)
-        await Promise.all([
-          fetchClassData(),
-          fetchAssessments()
-        ])
+        await fetchClassData(); // Fetch class data based on selected year, section, and subject
+        await saveUserPreferences(); // Save the updated preference
       } else {
-        localStorage.removeItem('selectedSubject')
+        students.value = [];
       }
-    })
+    });
 
     // Add clearFilters function
-    const clearFilters = () => {
-      selectedYear.value = ''
-      selectedSection.value = ''
-      selectedSubject.value = ''
-      availableSections.value = []
-      teacherSubjects.value = []
-      localStorage.removeItem('selectedYear')
-      localStorage.removeItem('selectedSection')
-      localStorage.removeItem('selectedSubject')
-      // Refetch available years after clearing
-      fetchAvailableYears()
-    }
+    const clearFilters = async () => {
+      // Reset all filter values
+      selectedYear.value = '';
+      selectedSection.value = '';
+      selectedSubject.value = '';
+      currentPage.value = 1;
+      
+      // Clear students array to avoid showing stale data
+      students.value = [];
+      assessments.value = [];
+      
+      // Remove preferences from localStorage
+      localStorage.removeItem('classRecordPreferences');
+      
+      try {
+        // Then clear from backend
+        const token = store.state.auth.token;
+        const userId = store.state.auth.user?._id;
+        
+        if (userId) {
+          const emptyPreferences = {
+            selectedYear: '',
+            selectedSection: '',
+            selectedSubject: '',
+            currentPage: 1
+          };
+          
+          await api.post('/users/preferences', 
+            { userId, preferences: emptyPreferences },
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          );
+          
+          console.log('Preferences cleared successfully');
+        }
+      } catch (error) {
+        console.error('Error clearing preferences:', error);
+      }
+    };
 
     // Add onMounted hook to fetch initial data
     onMounted(async () => {
@@ -1498,7 +1834,7 @@ export default {
     const getScoreClass = (percentage) => {
       if (percentage >= 90) return 'score-excellent'
       if (percentage >= 80) return 'score-good'
-      if (percentage >= 70) return 'score-average'
+      if (percentage >= 75) return 'score-average'
       return 'score-poor'
     }
 
@@ -1581,10 +1917,10 @@ export default {
             ticks: {
               color: '#6c757d',
               font: {
-                size: 11
-              },
-              callback: function(value) {
-                return value + '%';
+                size: 11,
+                callback: function(value) {
+                  return value + '%';
+                  }
                 }
               }
             }
@@ -1745,32 +2081,31 @@ export default {
     // Fetch available sections for the selected year
     const fetchAvailableSections = async () => {
       try {
-        const token = store.state.auth.token;
-        const teacherId = store.state.auth.user?._id;
-
-        if (!teacherId || !selectedYear.value) {
+        if (!selectedYear.value) {
+          console.log('No year selected for fetching sections');
           availableSections.value = [];
           return;
         }
 
-        const response = await api.get('/teacher-class-records', {
+        const teacherId = store.state.auth.user?._id;
+        const response = await api.get('/teacher-class-records/available-sections', {
           params: { 
             teacherId,
             year: selectedYear.value
           },
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: {
+            'Authorization': `Bearer ${store.state.auth.token}`
+          }
         });
 
         // Extract unique sections from teacher's records for the selected year
         const sections = [...new Set(response.data.map(record => record.section))];
         availableSections.value = sections.sort();
 
-        // If no section is selected but we have sections available, select the first one
-        if (!selectedSection.value && availableSections.value.length > 0) {
-          selectedSection.value = availableSections.value[0];
-        }
+        console.log('Fetched available sections:', availableSections.value);
       } catch (error) {
         console.error('Failed to fetch available sections:', error);
+        availableSections.value = [];
       }
     };
 
@@ -1783,115 +2118,68 @@ export default {
       if (!selectedStudent.value?.assessments) return [];
 
       return selectedStudent.value.assessments.filter(assessment => {
-        const assessmentDate = new Date(assessment.date);
-        let passesDateFilter = true;
+        // Apply type filter
+        if (selectedAssessmentType.value && assessment.type !== selectedAssessmentType.value) {
+          return false;
+        }
 
+        // Apply date filter
         if (historyDateRange.value.start && historyDateRange.value.end) {
+          const assessmentDate = new Date(assessment.date);
           const startDate = new Date(historyDateRange.value.start);
           startDate.setUTCHours(0, 0, 0, 0);
-          startDate.setHours(startDate.getHours() + 8); // Adjust for Philippine timezone
+          startDate.setHours(startDate.getHours() + 8);
           
           const endDate = new Date(historyDateRange.value.end);
           endDate.setUTCHours(23, 59, 59, 999);
           endDate.setHours(endDate.getHours() + 8); // Adjust for Philippine timezone
           
-          passesDateFilter = assessmentDate >= startDate && assessmentDate <= endDate;
+          if (assessmentDate < startDate || assessmentDate > endDate) {
+            return false;
+          }
         }
 
-        // Add type filter if selected
-        const passesTypeFilter = !selectedAssessmentType.value || assessment.type === selectedAssessmentType.value;
-
-        return passesDateFilter && passesTypeFilter;
-      }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date field
+        return true;
+      }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date, newest first
     });
 
     // Add filter handling functions
     const applyChartDateFilter = () => {
       if (chartDateRange.value.start && chartDateRange.value.end) {
-        const filteredAssessments = selectedStudent.value.assessments.filter(assessment => {
-          const assessmentDate = new Date(assessment.date);
-          const startDate = new Date(chartDateRange.value.start);
-          startDate.setUTCHours(0, 0, 0, 0);
-          startDate.setHours(startDate.getHours() + 8);
-          const endDate = new Date(chartDateRange.value.end);
-          endDate.setUTCHours(23, 59, 59, 999);
-          endDate.setHours(endDate.getHours() + 8);
-          return assessmentDate >= startDate && assessmentDate <= endDate;
-        });
-
-        // Group assessments by type
-        const assessmentsByType = {
-          Quiz: [],
-          Activity: [],
-          'Performance Task': []
-        };
-
-        filteredAssessments.forEach(assessment => {
-          const score = assessment.scores[selectedStudent.value.studentNumber];
-          if (assessment.type in assessmentsByType) {
-            assessmentsByType[assessment.type].push({
-              number: assessment.number,
-              score: score || 0,
-              maxScore: assessment.maxScore,
-              date: assessment.date,
-              type: assessment.type
-            });
-          }
-        });
-
-        // Update charts with filtered data
+        // Create charts with the new date range
         nextTick(() => {
-          Object.entries(assessmentsByType).forEach(([type, data]) => {
-            if (data.length > 0) {
-              const chartRef = type === 'Quiz' ? quizChart :
-                              type === 'Activity' ? activityChart :
-                              performanceChart;
-
-              const sortedData = data.sort((a, b) => new Date(a.date) - new Date(b.date));
-              
-              if (chartRef.value) {
-                createChart(chartRef, {
-                  type,
-                  labels: sortedData.map(a => formatDate(a.date)),
-                  scores: sortedData.map(a => (a.score / a.maxScore * 100).toFixed(1))
-                });
-              }
-            }
-          });
+          createPerformanceChart();
         });
       }
-      showChartDateFilter.value = false;
+      showChartDateFilter = false;
     };
 
     const clearChartDateFilter = () => {
-      chartDateRange.value = { start: '', end: '' };
-      // Destroy existing charts first
-      [quizChart, activityChart, performanceChart].forEach(chartRef => {
-        if (chartRef.value) {
-          const existingChart = Chart.getChart(chartRef.value);
-          if (existingChart) {
-            existingChart.destroy();
-          }
-        }
-      });
-      // Wait for the next tick before recreating charts
+      chartDateRange.value = { 
+        start: moment().subtract(30, 'days').format('YYYY-MM-DD'),
+        end: moment().format('YYYY-MM-DD')
+      };
+      
+      // Create charts with the reset date range
       nextTick(() => {
-        updateCharts();
+        createPerformanceChart();
       });
-      showChartDateFilter.value = false;
+      
+      showChartDateFilter = false;
     };
 
     const applyHistoryDateFilter = () => {
-      if (historyDateRange.value.start && historyDateRange.value.end) {
         // The filteredAssessments computed property will automatically update
         // based on the new date range
-      }
-      showHistoryDateFilter.value = false;
+      showHistoryDateFilter = false;
     };
 
     const clearHistoryDateFilter = () => {
-      historyDateRange.value = { start: '', end: '' };
-      showHistoryDateFilter.value = false;
+      historyDateRange.value = { 
+        start: moment().subtract(30, 'days').format('YYYY-MM-DD'),
+        end: moment().format('YYYY-MM-DD')
+      };
+      showHistoryDateFilter = false;
     };
 
     // Watch for assessment type changes
@@ -1907,20 +2195,6 @@ export default {
         console.error('Logout failed:', error)
       }
     }
-
-    // Add new computed property for filtered assessments by date
-    const filteredAssessmentsByDate = computed(() => {
-      return assessments.value.filter(assessment => {
-        const assessmentDate = new Date(assessment.date);
-        const currentDateStart = new Date(currentDate.value);
-        currentDateStart.setUTCHours(0, 0, 0, 0);
-        currentDateStart.setHours(currentDateStart.getHours() + 8); // Adjust for Philippine timezone
-        const currentDateEnd = new Date(currentDate.value);
-        currentDateEnd.setUTCHours(23, 59, 59, 999);
-        currentDateEnd.setHours(currentDateEnd.getHours() + 8); // Adjust for Philippine timezone
-        return assessmentDate >= currentDateStart && assessmentDate <= currentDateEnd;
-      });
-    });
 
     // Add date navigation function
     const navigateDate = (direction) => {
@@ -2314,6 +2588,1477 @@ export default {
       });
     };
 
+    // Add pagination state
+    const currentPage = ref(1)
+    const itemsPerPage = 25
+
+    // Compute total pages
+    const totalPages = computed(() => Math.ceil(sortedStudents.value.length / itemsPerPage))
+
+    // Get paginated students
+    const paginatedStudents = computed(() => {
+      const start = (currentPage.value - 1) * itemsPerPage
+      const end = start + itemsPerPage
+      return sortedStudents.value.slice(start, end)
+    })
+
+    // Compute pagination info
+    const paginationInfo = computed(() => {
+      const start = sortedStudents.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage + 1
+      const end = Math.min(start + itemsPerPage - 1, sortedStudents.value.length)
+      return { start, end }
+    })
+
+    // Pagination methods
+    const nextPage = () => {
+      if (currentPage.value < totalPages.value) {
+        currentPage.value++
+        saveUserPreferences(); // Save the updated page
+      }
+    }
+
+    const previousPage = () => {
+      if (currentPage.value > 1) {
+        currentPage.value--
+        saveUserPreferences(); // Save the updated page
+      }
+    }
+
+    // Reset pagination when filters change
+    watch([searchQuery, selectedYear, selectedSection, selectedSubject], () => {
+      currentPage.value = 1
+      // No need to save here as the filter change will trigger the filter watcher
+    })
+
+    // Add chart instances
+    let quizChartInstance = null;
+    let activityChartInstance = null;
+    let performanceChartInstance = null;
+
+    // Helper function to destroy chart
+    const destroyChart = (chartInstance, canvasRef) => {
+      try {
+        // Destroy the chart instance if it exists
+        if (chartInstance) {
+          chartInstance.destroy();
+        }
+        
+        // Clear any existing chart from the canvas
+        if (canvasRef && canvasRef.value) {
+          const existingChart = Chart.getChart(canvasRef.value);
+          if (existingChart) {
+            existingChart.destroy();
+          }
+          
+          // Clear any "no data" messages
+          const container = canvasRef.value.parentElement;
+          if (container) {
+            // Preserve the canvas but remove other elements
+            const canvas = canvasRef.value;
+            container.innerHTML = '';
+            if (canvas) {
+              container.appendChild(canvas);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error destroying chart:', error);
+      }
+    };
+
+    // Handle date filter change from the modal
+    const handleDateFilterChange = (dateFilter) => {
+      console.log('Date filter changed:', dateFilter);
+      
+      // Update chart date range
+      if (dateFilter.start) {
+        chartDateRange.value.start = dateFilter.start;
+        historyDateRange.value.start = dateFilter.start;
+      }
+      
+      if (dateFilter.end) {
+        chartDateRange.value.end = dateFilter.end;
+        historyDateRange.value.end = dateFilter.end;
+      }
+      
+      // Recreate charts with the new date range
+      nextTick(() => {
+        createPerformanceChart();
+        // The assessment history table will be updated by createPerformanceChart
+      });
+    };
+
+    // Handle assessment type change from the modal
+    const handleAssessmentTypeChange = (type) => {
+      console.log('Assessment type changed:', type);
+      
+      // Update the selected assessment type
+      selectedAssessmentType.value = type;
+      
+      // Recreate charts with the new assessment type
+      nextTick(() => {
+        createPerformanceChart();
+      });
+    };
+
+    // Create performance chart function
+    const createPerformanceChart = () => {
+      if (!selectedStudent.value) {
+        console.error('No student selected, cannot create performance chart');
+        return;
+      }
+
+      console.log('Creating performance charts for student:', selectedStudent.value.studentNumber);
+      console.log('Selected assessment type:', selectedAssessmentType.value);
+      console.log('Date range:', chartDateRange.value);
+
+      // Group assessments by type
+      const assessmentsByType = {
+        'Quiz': [],
+        'Activity': [],
+        'Performance Task': []
+      };
+
+      // Process assessments if they exist
+      if (selectedStudent.value.assessments && selectedStudent.value.assessments.length > 0) {
+        console.log(`Processing ${selectedStudent.value.assessments.length} assessments for charts`);
+        
+        selectedStudent.value.assessments.forEach(assessment => {
+          if (assessment && assessment.type in assessmentsByType) {
+            // Get the score for this student
+            const studentNumber = selectedStudent.value.studentNumber;
+            let scoreValue = null;
+            
+            // Check if scores is a Map or an object
+            if (assessment.scores) {
+              if (assessment.scores instanceof Map) {
+                scoreValue = assessment.scores.get(studentNumber);
+              } else if (typeof assessment.scores === 'object') {
+                scoreValue = assessment.scores[studentNumber];
+              }
+            }
+            
+            // If score is not found in assessment.scores, check student.scores
+            if ((scoreValue === null || scoreValue === undefined) && 
+                selectedStudent.value.scores && 
+                (assessment._id in selectedStudent.value.scores || assessment.id in selectedStudent.value.scores)) {
+              scoreValue = selectedStudent.value.scores[assessment._id] || selectedStudent.value.scores[assessment.id];
+            }
+            
+            // Only include assessments with scores
+            if (scoreValue !== null && scoreValue !== undefined) {
+              const maxScore = assessment.maxScore || 100;
+              const scorePercentage = (scoreValue / maxScore) * 100;
+              
+              // Apply date filter if set
+              const assessmentDate = new Date(assessment.date);
+              const startDate = chartDateRange.value.start ? new Date(chartDateRange.value.start) : null;
+              const endDate = chartDateRange.value.end ? new Date(chartDateRange.value.end) : null;
+              
+              // Skip if outside date range
+              if ((startDate && assessmentDate < startDate) || 
+                  (endDate && assessmentDate > endDate)) {
+                console.log(`Skipping assessment ${assessment.type} #${assessment.number} due to date filter`);
+                return;
+              }
+              
+              console.log(`Including assessment ${assessment.type} #${assessment.number}: Score=${scoreValue}/${maxScore} (${scorePercentage.toFixed(1)}%)`);
+              
+              assessmentsByType[assessment.type].push({
+                date: assessment.date,
+                score: scorePercentage,
+                rawScore: scoreValue,
+                maxScore: maxScore,
+                number: assessment.number,
+                title: `${assessment.type} #${assessment.number}`
+              });
+            }
+          }
+        });
+      }
+
+      // Log the grouped assessments for debugging
+      Object.keys(assessmentsByType).forEach(type => {
+        console.log(`${type} assessments: ${assessmentsByType[type].length}`);
+      });
+
+      // Create charts for each type using the new chart IDs
+      const chartIdBase = `performanceChart-${selectedStudent.value.studentNumber}`;
+      
+      // First, clean up any existing charts
+      const chartIds = [
+        `all-${chartIdBase}`,
+        `quiz-${chartIdBase}`,
+        `activity-${chartIdBase}`,
+        `performance-${chartIdBase}`
+      ];
+      
+      chartIds.forEach(id => {
+        const chartElement = document.getElementById(id);
+        if (chartElement) {
+          const existingChart = Chart.getChart(chartElement);
+          if (existingChart) {
+            console.log(`Destroying existing chart: ${id}`);
+            existingChart.destroy();
+          }
+        }
+      });
+      
+      // Update the assessment history table with the filtered data
+      updateAssessmentHistoryTable(assessmentsByType);
+      
+      // Create "All" chart that combines all assessment types
+      if (selectedAssessmentType.value === 'All') {
+        const allChartElement = document.getElementById(`all-${chartIdBase}`);
+        if (allChartElement) {
+          const ctx = allChartElement.getContext('2d');
+          if (ctx) {
+            // Combine all assessment types into one dataset
+            const allAssessments = [
+              ...assessmentsByType['Quiz'].map(item => ({ ...item, type: 'Quiz' })),
+              ...assessmentsByType['Activity'].map(item => ({ ...item, type: 'Activity' })),
+              ...assessmentsByType['Performance Task'].map(item => ({ ...item, type: 'Performance Task' }))
+            ].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            if (allAssessments.length === 0) {
+              // Display no data message
+              const container = allChartElement.parentElement;
+              if (container) {
+                container.innerHTML = '';
+                const noDataMessage = document.createElement('div');
+                noDataMessage.className = 'text-center py-5 text-muted';
+                noDataMessage.innerHTML = '<i class="fas fa-info-circle me-2"></i>No assessment data available for this student in the selected date range.';
+                container.appendChild(noDataMessage);
+              }
+            } else {
+              // Create datasets for each type
+              const datasets = [
+                {
+                  label: 'Quiz',
+                  data: allAssessments.filter(item => item.type === 'Quiz').map(item => ({ x: new Date(item.date), y: item.score })),
+                  borderColor: '#4285F4',
+                  backgroundColor: 'rgba(66, 133, 244, 0.1)',
+                  borderWidth: 2,
+                  tension: 0.4,
+                  pointBackgroundColor: '#4285F4',
+                  pointBorderColor: '#fff',
+                  pointRadius: 5
+                },
+                {
+                  label: 'Activity',
+                  data: allAssessments.filter(item => item.type === 'Activity').map(item => ({ x: new Date(item.date), y: item.score })),
+                  borderColor: '#34A853',
+                  backgroundColor: 'rgba(52, 168, 83, 0.1)',
+                  borderWidth: 2,
+                  tension: 0.4,
+                  pointBackgroundColor: '#34A853',
+                  pointBorderColor: '#fff',
+                  pointRadius: 5
+                },
+                {
+                  label: 'Performance Task',
+                  data: allAssessments.filter(item => item.type === 'Performance Task').map(item => ({ x: new Date(item.date), y: item.score })),
+                  borderColor: '#FBBC05',
+                  backgroundColor: 'rgba(251, 188, 5, 0.1)',
+                  borderWidth: 2,
+                  tension: 0.4,
+                  pointBackgroundColor: '#FBBC05',
+                  pointBorderColor: '#fff',
+                  pointRadius: 5
+                }
+              ].filter(dataset => dataset.data.length > 0); // Only include datasets with data
+              
+              // Create the combined chart
+              new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      type: 'time',
+                      time: {
+                        unit: 'day',
+                        displayFormats: {
+                          day: 'MMM D, YYYY'
+                        },
+                        tooltipFormat: 'MMM D, YYYY'
+                      },
+                      adapters: {
+                        date: {
+                          locale: 'en'
+                        }
+                      },
+                      title: {
+                        display: true,
+                        text: 'Date'
+                      },
+                      grid: {
+                        display: false
+                      },
+                      ticks: {
+                        font: {
+                          size: 12,
+                          weight: 'bold'
+                        },
+                        padding: 10
+                      }
+                    },
+                    y: {
+                      beginAtZero: true,
+                      max: 100,
+                      title: {
+                        display: true,
+                        text: 'Score (%)'
+                      },
+                      ticks: {
+                        callback: value => value + '%'
+                      }
+                    }
+                  },
+                  plugins: {
+                    tooltip: {
+                      callbacks: {
+                        title: (context) => {
+                          return moment(context[0].parsed.x).format('MMMM D, YYYY');
+                        },
+                        label: (context) => {
+                          const datasetLabel = context.dataset.label;
+                          const value = context.parsed.y;
+                          return `${datasetLabel}: ${value.toFixed(1)}%`;
+                        }
+                      }
+                    },
+                    legend: {
+                      position: 'top'
+                    }
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+      
+      // Create Quiz chart
+      if (selectedAssessmentType.value === 'Quiz') {
+        const quizChartElement = document.getElementById(`quiz-${chartIdBase}`);
+        if (quizChartElement) {
+          const ctx = quizChartElement.getContext('2d');
+          if (ctx) {
+            const data = assessmentsByType['Quiz'].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            if (data.length === 0) {
+              // Display no data message
+              const container = quizChartElement.parentElement;
+              if (container) {
+                container.innerHTML = '';
+                const noDataMessage = document.createElement('div');
+                noDataMessage.className = 'text-center py-5 text-muted';
+                noDataMessage.innerHTML = '<i class="fas fa-info-circle me-2"></i>No quiz data available for this student in the selected date range.';
+                container.appendChild(noDataMessage);
+              }
+            } else {
+              // Create time series data
+              const timeSeriesData = data.map(item => ({
+                x: new Date(item.date),
+                y: item.score,
+                rawScore: item.rawScore,
+                maxScore: item.maxScore,
+                number: item.number
+              }));
+              
+              // Create chart
+              new Chart(ctx, {
+                type: 'line',
+                data: {
+                  datasets: [{
+                    label: 'Quiz Scores',
+                    data: timeSeriesData,
+                    borderColor: '#4285F4',
+                    backgroundColor: 'rgba(66, 133, 244, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: '#4285F4',
+                    pointBorderColor: '#fff',
+                    pointRadius: 5
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      type: 'time',
+                      time: {
+                        unit: 'day',
+                        displayFormats: {
+                          day: 'MMM D, YYYY'
+                        },
+                        tooltipFormat: 'MMM D, YYYY'
+                      },
+                      adapters: {
+                        date: {
+                          locale: 'en'
+                        }
+                      },
+                      title: {
+                        display: true,
+                        text: 'Date'
+                      },
+                      grid: {
+                        display: false
+                      }
+                    },
+                    y: {
+                      beginAtZero: true,
+                      max: 100,
+                      title: {
+                        display: true,
+                        text: 'Score (%)'
+                      },
+                      ticks: {
+                        callback: value => value + '%'
+                      }
+                    }
+                  },
+                  plugins: {
+                    tooltip: {
+                      callbacks: {
+                        title: (context) => {
+                          return moment(context[0].parsed.x).format('MMMM D, YYYY');
+                        },
+                        label: (context) => {
+                          const item = context.raw;
+                          return [
+                            `Quiz #${item.number}`,
+                            `Score: ${item.rawScore}/${item.maxScore} (${item.y.toFixed(1)}%)`
+                          ];
+                        }
+                      }
+                    }
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+
+      // Create Activity chart
+      if (selectedAssessmentType.value === 'Activity') {
+        const activityChartElement = document.getElementById(`activity-${chartIdBase}`);
+        if (activityChartElement) {
+          const ctx = activityChartElement.getContext('2d');
+          if (ctx) {
+            const data = assessmentsByType['Activity'].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            if (data.length === 0) {
+              // Display no data message
+              const container = activityChartElement.parentElement;
+              if (container) {
+                container.innerHTML = '';
+                const noDataMessage = document.createElement('div');
+                noDataMessage.className = 'text-center py-5 text-muted';
+                noDataMessage.innerHTML = '<i class="fas fa-info-circle me-2"></i>No activity data available for this student in the selected date range.';
+                container.appendChild(noDataMessage);
+              }
+            } else {
+              // Create time series data
+              const timeSeriesData = data.map(item => ({
+                x: new Date(item.date),
+                y: item.score,
+                rawScore: item.rawScore,
+                maxScore: item.maxScore,
+                number: item.number
+              }));
+              
+              // Create chart
+              new Chart(ctx, {
+                type: 'line',
+                data: {
+                  datasets: [{
+                    label: 'Activity Scores',
+                    data: timeSeriesData,
+                    borderColor: '#34A853',
+                    backgroundColor: 'rgba(52, 168, 83, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: '#34A853',
+                    pointBorderColor: '#fff',
+                    pointRadius: 5
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      type: 'time',
+                      time: {
+                        unit: 'day',
+                        displayFormats: {
+                          day: 'MMM D, YYYY'
+                        },
+                        tooltipFormat: 'MMM D, YYYY'
+                      },
+                      adapters: {
+                        date: {
+                          locale: 'en'
+                        }
+                      },
+                      title: {
+                        display: true,
+                        text: 'Date'
+                      },
+                      grid: {
+                        display: false
+                      }
+                    },
+                    y: {
+                      beginAtZero: true,
+                      max: 100,
+                      title: {
+                        display: true,
+                        text: 'Score (%)'
+                      },
+                      ticks: {
+                        callback: value => value + '%'
+                      }
+                    }
+                  },
+                  plugins: {
+                    tooltip: {
+                      callbacks: {
+                        title: (context) => {
+                          return moment(context[0].parsed.x).format('MMMM D, YYYY');
+                        },
+                        label: (context) => {
+                          const item = context.raw;
+                          return [
+                            `Activity #${item.number}`,
+                            `Score: ${item.rawScore}/${item.maxScore} (${item.y.toFixed(1)}%)`
+                          ];
+                        }
+                      }
+                    }
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+
+      // Create Performance Task chart
+      if (selectedAssessmentType.value === 'Performance Task') {
+        const performanceChartElement = document.getElementById(`performance-${chartIdBase}`);
+        if (performanceChartElement) {
+          const ctx = performanceChartElement.getContext('2d');
+          if (ctx) {
+            const data = assessmentsByType['Performance Task'].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            if (data.length === 0) {
+              // Display no data message
+              const container = performanceChartElement.parentElement;
+              if (container) {
+                container.innerHTML = '';
+                const noDataMessage = document.createElement('div');
+                noDataMessage.className = 'text-center py-5 text-muted';
+                noDataMessage.innerHTML = '<i class="fas fa-info-circle me-2"></i>No performance task data available for this student in the selected date range.';
+                container.appendChild(noDataMessage);
+              }
+            } else {
+              // Create time series data
+              const timeSeriesData = data.map(item => ({
+                x: new Date(item.date),
+                y: item.score,
+                rawScore: item.rawScore,
+                maxScore: item.maxScore,
+                number: item.number
+              }));
+              
+              // Create chart
+              new Chart(ctx, {
+                type: 'line',
+                data: {
+                  datasets: [{
+                    label: 'Performance Task Scores',
+                    data: timeSeriesData,
+                    borderColor: '#FBBC05',
+                    backgroundColor: 'rgba(251, 188, 5, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: '#FBBC05',
+                    pointBorderColor: '#fff',
+                    pointRadius: 5
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      type: 'time',
+                      time: {
+                        unit: 'day',
+                        displayFormats: {
+                          day: 'MMM D, YYYY'
+                        },
+                        tooltipFormat: 'MMM D, YYYY'
+                      },
+                      adapters: {
+                        date: {
+                          locale: 'en'
+                        }
+                      },
+                      title: {
+                        display: true,
+                        text: 'Date'
+                      },
+                      grid: {
+                        display: false
+                      }
+                    },
+                    y: {
+                      beginAtZero: true,
+                      max: 100,
+                      title: {
+                        display: true,
+                        text: 'Score (%)'
+                      },
+                      ticks: {
+                        callback: value => value + '%'
+                      }
+                    }
+                  },
+                  plugins: {
+                    tooltip: {
+                      callbacks: {
+                        title: (context) => {
+                          return moment(context[0].parsed.x).format('MMMM D, YYYY');
+                        },
+                        label: (context) => {
+                          const item = context.raw;
+                          return [
+                            `Performance Task #${item.number}`,
+                            `Score: ${item.rawScore}/${item.maxScore} (${item.y.toFixed(1)}%)`
+                          ];
+                        }
+                      }
+                    }
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+    };
+
+    // Helper function to create individual charts
+    const createChartInstance = (ctx, type, data) => {
+      if (!ctx) return null;
+
+      // Generate a unique ID for the chart
+      const chartId = `${type.toLowerCase()}-${Date.now()}`;
+      ctx.canvas.id = chartId;
+
+      if (data.length === 0) {
+        try {
+          // Find the parent container safely
+          const canvas = ctx.canvas;
+          if (!canvas) return null;
+          
+          const container = canvas.parentElement;
+          if (!container) return null;
+          
+          // Create a wrapper div for the message
+          const messageWrapper = document.createElement('div');
+          messageWrapper.className = 'text-center py-4 text-muted';
+          messageWrapper.innerHTML = `<i class="fas fa-info-circle me-2"></i>No ${type.toLowerCase()} data available`;
+          
+          // Clear the container and append the message
+          container.innerHTML = '';
+          container.appendChild(messageWrapper);
+          
+          return null;
+        } catch (error) {
+          console.error('Error displaying no data message:', error);
+          return null;
+        }
+      }
+
+      // Define chart colors based on type
+      const getChartColors = (type) => {
+        switch(type) {
+          case 'Quiz':
+            return {
+              gradient: ['rgba(66, 133, 244, 0.8)', 'rgba(66, 133, 244, 0.1)'],
+              border: '#4285F4',
+              point: '#4285F4',
+              pointHover: '#3367D6'
+            };
+          case 'Activity':
+            return {
+              gradient: ['rgba(52, 168, 83, 0.8)', 'rgba(52, 168, 83, 0.1)'],
+              border: '#34A853',
+              point: '#34A853',
+              pointHover: '#2E7D32'
+            };
+          case 'Performance Task':
+            return {
+              gradient: ['rgba(251, 188, 5, 0.8)', 'rgba(251, 188, 5, 0.1)'],
+              border: '#FBBC05',
+              point: '#FBBC05',
+              pointHover: '#F57F17'
+            };
+          default:
+            return {
+              gradient: ['rgba(66, 133, 244, 0.8)', 'rgba(66, 133, 244, 0.1)'],
+              border: '#4285F4',
+              point: '#4285F4',
+              pointHover: '#3367D6'
+            };
+        }
+      };
+
+      const colors = getChartColors(type);
+      
+      // Create gradient for background
+      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+      gradient.addColorStop(0, colors.gradient[0]);
+      gradient.addColorStop(1, colors.gradient[1]);
+
+      // Convert data to time series format
+      const timeSeriesData = data.map(item => ({
+        x: new Date(item.date),
+        y: item.score
+      }));
+
+      return new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: `${type} Scores`,
+            data: timeSeriesData,
+            borderColor: colors.border,
+            backgroundColor: gradient,
+            borderWidth: 3,
+            tension: 0.4,
+            fill: true,
+            pointBackgroundColor: colors.point,
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointHoverBackgroundColor: colors.pointHover,
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animations: {
+            tension: {
+              duration: 1000,
+              easing: 'linear',
+              from: 0.4,
+              to: 0.4,
+              loop: false
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'day',
+                displayFormats: {
+                  day: 'MMM D, YYYY'
+                },
+                tooltipFormat: 'MMM D, YYYY'
+              },
+              adapters: {
+                date: {
+                  locale: 'en'
+                }
+              },
+              title: {
+                display: true,
+                text: 'Date'
+              },
+              grid: {
+                display: false
+              },
+              ticks: {
+                font: {
+                  size: 12,
+                  weight: 'bold'
+                },
+                padding: 10
+              }
+            },
+            y: {
+              beginAtZero: true,
+              max: 100,
+              grid: {
+                color: 'rgba(0, 0, 0, 0.05)',
+                borderDash: [5, 5]
+              },
+              ticks: {
+                font: {
+                  size: 12,
+                  weight: 'bold'
+                },
+                padding: 10,
+                callback: value => value + '%'
+              },
+              title: {
+                display: true,
+                text: 'Score (%)'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                boxWidth: 15,
+                padding: 15,
+                font: {
+                  size: 14,
+                  weight: 'bold'
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleFont: {
+                size: 14,
+                weight: 'bold'
+              },
+              bodyFont: {
+                size: 13
+              },
+              padding: 15,
+              cornerRadius: 8,
+              displayColors: false,
+              callbacks: {
+                title: (tooltipItems) => {
+                  return moment(tooltipItems[0].parsed.x).format('MMMM D, YYYY');
+                },
+                label: (context) => {
+                  const index = context.dataIndex;
+                  const item = data[index];
+                  return [
+                    `${type} #${item.number}`,
+                    `Score: ${item.rawScore}/${item.maxScore} (${item.score.toFixed(1)}%)`
+                  ];
+                }
+              }
+            }
+          }
+        }
+      });
+    };
+
+    // Clean up charts when component unmounts
+    onUnmounted(() => {
+      // Clean up all charts
+      const chartIdBase = selectedStudent.value ? `performanceChart-${selectedStudent.value.studentNumber}` : '';
+      
+      if (chartIdBase) {
+        // Destroy all charts
+        const chartIds = [
+          `all-${chartIdBase}`,
+          `quiz-${chartIdBase}`,
+          `activity-${chartIdBase}`,
+          `performance-${chartIdBase}`
+        ];
+        
+        chartIds.forEach(id => {
+          const chartElement = document.getElementById(id);
+          if (chartElement) {
+            const chart = Chart.getChart(chartElement);
+            if (chart) {
+              chart.destroy();
+            }
+          }
+        });
+      }
+    });
+
+    // Watch for changes in selected student to update charts
+    watch(selectedStudent, () => {
+      if (selectedStudent.value) {
+        nextTick(() => {
+          createPerformanceChart();
+        });
+      } else {
+        // Clean up all charts when student is deselected
+        const chartIdBase = `performanceChart-${selectedStudent.value?.studentNumber}`;
+        
+        if (chartIdBase) {
+          // Destroy all charts
+          const chartIds = [
+            `all-${chartIdBase}`,
+            `quiz-${chartIdBase}`,
+            `activity-${chartIdBase}`,
+            `performance-${chartIdBase}`
+          ];
+          
+          chartIds.forEach(id => {
+            const chartElement = document.getElementById(id);
+            if (chartElement) {
+              const chart = Chart.getChart(chartElement);
+              if (chart) {
+                chart.destroy();
+              }
+            }
+          });
+        }
+      }
+    });
+
+    // Watch for changes in date range to update charts
+    watch([chartDateRange, historyDateRange], () => {
+      if (selectedStudent.value) {
+        nextTick(() => {
+          createPerformanceChart();
+        });
+      }
+    });
+
+    // Watch for changes in current date to refresh data
+    watch(currentDate, async () => {
+      await fetchAssessments();
+      if (selectedStudent.value) {
+        await viewStudentDetails(selectedStudent.value);
+      }
+    });
+
+    // Function to fetch user preferences from the API
+    const fetchUserPreferences = async () => {
+      try {
+        console.log('Fetching user preferences...');
+        
+        // First try to get from localStorage
+        const localPrefs = localStorage.getItem('classRecordPreferences');
+        let localPrefsObj = null;
+        
+        if (localPrefs) {
+          try {
+            localPrefsObj = JSON.parse(localPrefs);
+            console.log('Found preferences in localStorage:', localPrefsObj);
+            
+            // Apply local preferences first
+            if (localPrefsObj.selectedYear) selectedYear.value = localPrefsObj.selectedYear;
+            if (localPrefsObj.selectedSection) selectedSection.value = localPrefsObj.selectedSection;
+            if (localPrefsObj.selectedSubject) selectedSubject.value = localPrefsObj.selectedSubject;
+            if (localPrefsObj.currentPage) currentPage.value = parseInt(localPrefsObj.currentPage) || 1;
+          } catch (parseError) {
+            console.error('Error parsing localStorage preferences:', parseError);
+            localStorage.removeItem('classRecordPreferences');
+          }
+        } else {
+          console.log('No preferences found in localStorage');
+        }
+
+        // Then try to get from backend
+        const token = store.state.auth.token;
+        const userId = store.state.auth.user?._id;
+        
+        if (!userId) {
+          console.error('User ID not available for fetching preferences');
+          return;
+        }
+        
+        console.log('Fetching preferences from backend for user:', userId);
+        
+        const response = await api.get('/users/preferences', {
+          params: { userId },
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        console.log('Backend preferences response:', response.data);
+        
+        if (response.data && response.data.preferences) {
+          const prefs = response.data.preferences;
+          
+          // Update preferences if available
+          if (prefs.selectedYear) selectedYear.value = prefs.selectedYear;
+          if (prefs.selectedSection) selectedSection.value = prefs.selectedSection;
+          if (prefs.selectedSubject) selectedSubject.value = prefs.selectedSubject;
+          if (prefs.currentPage) currentPage.value = parseInt(prefs.currentPage) || 1;
+          
+          // Save to localStorage to ensure consistency
+          localStorage.setItem('classRecordPreferences', JSON.stringify(prefs));
+          console.log('Updated preferences from backend:', prefs);
+        } else {
+          console.log('No preferences found in backend, using localStorage values');
+          
+          // If we have local preferences but none from backend, save local to backend
+          if (localPrefsObj) {
+            await saveUserPreferences();
+          }
+        }
+        
+        console.log('Final preferences after fetching:', {
+          year: selectedYear.value,
+          section: selectedSection.value,
+          subject: selectedSubject.value,
+          page: currentPage.value
+        });
+        
+        // Fetch data based on preferences in a specific order
+        if (selectedYear.value) {
+          console.log('Fetching sections for year:', selectedYear.value);
+          await fetchAvailableSections();
+        
+          if (selectedSection.value) {
+            console.log('Updating teacher subjects for section:', selectedSection.value);
+          await updateTeacherSubjects();
+        
+            if (selectedSubject.value) {
+              console.log('Fetching class data for subject:', selectedSubject.value);
+              // Ensure we fetch the data with the current filters
+          await fetchClassData();
+              
+              // Ensure the current page is applied after data is loaded
+              console.log('Applying saved page number:', currentPage.value);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user preferences:', error);
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
+        
+        // Try to use localStorage preferences if API call fails
+        const localPrefs = localStorage.getItem('classRecordPreferences');
+        if (localPrefs) {
+          try {
+            const prefs = JSON.parse(localPrefs);
+            console.log('Falling back to localStorage preferences:', prefs);
+            
+            selectedYear.value = prefs.selectedYear || '';
+            selectedSection.value = prefs.selectedSection || '';
+            selectedSubject.value = prefs.selectedSubject || '';
+            if (prefs.currentPage) currentPage.value = parseInt(prefs.currentPage) || 1;
+            
+            // Try to fetch data with these preferences
+            if (selectedYear.value) {
+              await fetchAvailableSections();
+              
+              if (selectedSection.value) {
+                await updateTeacherSubjects();
+                
+                if (selectedSubject.value) {
+                  await fetchClassData();
+                }
+              }
+            }
+          } catch (parseError) {
+            console.error('Error parsing localStorage preferences during fallback:', parseError);
+          }
+        }
+      }
+    };
+    
+    // Function to save user preferences to the API
+    const saveUserPreferences = async () => {
+      try {
+        const token = store.state.auth.token;
+        const userId = store.state.auth.user?._id;
+        
+        if (!userId) {
+          console.error('User ID not available for saving preferences');
+          return;
+        }
+        
+        const preferences = {
+          selectedYear: selectedYear.value,
+          selectedSection: selectedSection.value,
+          selectedSubject: selectedSubject.value,
+          currentPage: currentPage.value
+        };
+
+        console.log('Saving preferences:', preferences);
+
+        // Save to localStorage first for immediate persistence
+        localStorage.setItem('classRecordPreferences', JSON.stringify(preferences));
+        
+        // Then save to backend
+        const response = await api.post('/users/preferences', 
+          { userId, preferences },
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        
+        console.log('User preferences saved successfully:', response.data);
+      } catch (error) {
+        console.error('Error saving user preferences:', error);
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
+        
+        // Ensure localStorage is still updated even if API call fails
+        try {
+          const preferences = {
+            selectedYear: selectedYear.value,
+            selectedSection: selectedSection.value,
+            selectedSubject: selectedSubject.value,
+            currentPage: currentPage.value
+          };
+          localStorage.setItem('classRecordPreferences', JSON.stringify(preferences));
+          console.log('Preferences saved to localStorage as fallback');
+        } catch (localStorageError) {
+          console.error('Failed to save preferences to localStorage:', localStorageError);
+        }
+      }
+    };
+
+    // Update the watchers for filter changes
+    watch([selectedYear, selectedSection, selectedSubject], async ([newYear, newSection, newSubject], [oldYear, oldSection, oldSubject]) => {
+      // Save preferences whenever they change
+      await saveUserPreferences();
+      
+      // Handle year changes
+      if (newYear !== oldYear) {
+        selectedSection.value = '';
+        selectedSubject.value = '';
+        if (newYear) {
+          await fetchAvailableSections();
+        }
+      }
+      
+      // Handle section changes
+      if (newSection !== oldSection) {
+        selectedSubject.value = '';
+        if (newSection) {
+          await updateTeacherSubjects();
+        }
+      }
+      
+      // Handle subject changes
+      if (newSubject !== oldSubject && newSubject) {
+        await fetchClassData();
+      }
+    });
+
+    // Add watcher for currentPage
+    watch(currentPage, () => {
+      console.log('Current page changed to:', currentPage.value);
+      saveUserPreferences();
+    });
+
+    // Add cleanup on component unmount
+    onUnmounted(() => {
+      // Save preferences before unmounting
+      saveUserPreferences();
+      
+      // Clear intervals if any
+      if (dateUpdateInterval) {
+        clearInterval(dateUpdateInterval);
+      }
+    });
+
+    // Add a function to load the last used filters
+    const loadLastUsedFilters = async () => {
+      try {
+        console.log('Attempting to load last used filters');
+        const token = store.state.auth.token;
+        const userId = store.state.auth.user?._id;
+        
+        if (!userId) {
+          console.error('User ID not available for loading last used filters');
+          return false;
+        }
+        
+        // First check if we have any recent filters in localStorage
+        const recentFilters = localStorage.getItem('recentFilters');
+        if (recentFilters) {
+          try {
+            const filters = JSON.parse(recentFilters);
+            console.log('Found recent filters in localStorage:', filters);
+            
+            if (filters.length > 0) {
+              // Get the most recent filter
+              const mostRecent = filters[0];
+              
+              // Apply the values
+              if (mostRecent.year) selectedYear.value = mostRecent.year;
+              if (mostRecent.section) selectedSection.value = mostRecent.section;
+              if (mostRecent.subject) selectedSubject.value = mostRecent.subject;
+              
+              // Save to classRecordPreferences
+              const preferences = {
+                selectedYear: selectedYear.value,
+                selectedSection: selectedSection.value,
+                selectedSubject: selectedSubject.value,
+                currentPage: currentPage.value
+              };
+              
+              localStorage.setItem('classRecordPreferences', JSON.stringify(preferences));
+              console.log('Recent filters applied from localStorage:', preferences);
+              
+              return true;
+            }
+          } catch (parseError) {
+            console.error('Error parsing recent filters from localStorage:', parseError);
+          }
+        }
+        
+        // If no recent filters in localStorage, try to get from API
+        try {
+          // First try to get the user's teaching assignments
+          const response = await api.get('/users/teaching-assignments', {
+            params: { userId },
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (response.data && response.data.assignments && response.data.assignments.length > 0) {
+            // Sort by last accessed timestamp if available
+            const sortedAssignments = [...response.data.assignments].sort((a, b) => {
+              // If lastAccessed is available, use it for sorting
+              if (a.lastAccessed && b.lastAccessed) {
+                return new Date(b.lastAccessed) - new Date(a.lastAccessed);
+              }
+              return 0;
+            });
+            
+            // Use the most recently accessed assignment
+            const mostRecent = sortedAssignments[0];
+            console.log('Most recently used assignment from API:', mostRecent);
+            
+            // Apply the values
+            if (mostRecent.year) selectedYear.value = mostRecent.year;
+            if (mostRecent.section) selectedSection.value = mostRecent.section;
+            if (mostRecent.subject) selectedSubject.value = mostRecent.subject;
+            
+            // Save to localStorage
+            const preferences = {
+              selectedYear: selectedYear.value,
+              selectedSection: selectedSection.value,
+              selectedSubject: selectedSubject.value,
+              currentPage: currentPage.value
+            };
+            
+            localStorage.setItem('classRecordPreferences', JSON.stringify(preferences));
+            console.log('Last used filters applied from API:', preferences);
+            
+            // Also save to recentFilters
+            saveToRecentFilters({
+              year: selectedYear.value,
+              section: selectedSection.value,
+              subject: selectedSubject.value,
+              timestamp: new Date().toISOString()
+            });
+            
+            return true;
+          } else {
+            console.log('No teaching assignments found in API');
+            return false;
+          }
+        } catch (apiError) {
+          console.error('Error fetching teaching assignments from API:', apiError);
+          return false;
+        }
+      } catch (error) {
+        console.error('Error loading last used filters:', error);
+        return false;
+      }
+    };
+
+    // Function to save a filter combination to the recent filters list
+    const saveToRecentFilters = (filter) => {
+      try {
+        // Get existing recent filters or initialize empty array
+        const recentFiltersStr = localStorage.getItem('recentFilters');
+        let recentFilters = [];
+        
+        if (recentFiltersStr) {
+          try {
+            recentFilters = JSON.parse(recentFiltersStr);
+          } catch (parseError) {
+            console.error('Error parsing recent filters, resetting:', parseError);
+          }
+        }
+        
+        // Check if this filter combination already exists
+        const existingIndex = recentFilters.findIndex(f => 
+          f.year === filter.year && 
+          f.section === filter.section && 
+          f.subject === filter.subject
+        );
+        
+        // If it exists, remove it (we'll add it back at the top)
+        if (existingIndex !== -1) {
+          recentFilters.splice(existingIndex, 1);
+        }
+        
+        // Add the new filter at the beginning
+        recentFilters.unshift(filter);
+        
+        // Keep only the 5 most recent filters
+        if (recentFilters.length > 5) {
+          recentFilters = recentFilters.slice(0, 5);
+        }
+        
+        // Save back to localStorage
+        localStorage.setItem('recentFilters', JSON.stringify(recentFilters));
+        console.log('Updated recent filters:', recentFilters);
+      } catch (error) {
+        console.error('Error saving to recent filters:', error);
+      }
+    };
+
+    // Update assessment history table
+    const updateAssessmentHistoryTable = (assessmentsByType) => {
+      if (!selectedStudent.value) return;
+      
+      console.log('Updating assessment history table with date range:', historyDateRange.value);
+      
+      // If assessmentsByType is not provided, use the current assessments
+      if (!assessmentsByType) {
+        // Group assessments by type
+        assessmentsByType = {
+          'Quiz': [],
+          'Activity': [],
+          'Performance Task': []
+        };
+        
+        // Filter assessments for the selected student
+        if (selectedStudent.value.assessments && selectedStudent.value.assessments.length > 0) {
+          selectedStudent.value.assessments.forEach(assessment => {
+            // Get the score for this student
+            const studentNumber = selectedStudent.value.studentNumber;
+            let scoreValue = null;
+            
+            // Check if scores is a Map or an object
+            if (assessment.scores) {
+              if (assessment.scores instanceof Map) {
+                scoreValue = assessment.scores.get(studentNumber);
+              } else if (typeof assessment.scores === 'object') {
+                scoreValue = assessment.scores[studentNumber];
+              }
+            }
+            
+            // If score is not found in assessment.scores, check student.scores
+            if ((scoreValue === null || scoreValue === undefined) && 
+                selectedStudent.value.scores && 
+                (assessment._id in selectedStudent.value.scores || assessment.id in selectedStudent.value.scores)) {
+              scoreValue = selectedStudent.value.scores[assessment._id] || selectedStudent.value.scores[assessment.id];
+            }
+            
+            if (scoreValue !== null && scoreValue !== undefined) {
+              const maxScore = assessment.maxScore || 100;
+              const scorePercentage = (scoreValue / maxScore) * 100;
+              
+              // Apply date filter if set
+              const assessmentDate = new Date(assessment.date);
+              const startDate = historyDateRange.value.start ? new Date(historyDateRange.value.start) : null;
+              const endDate = historyDateRange.value.end ? new Date(historyDateRange.value.end) : null;
+              
+              // Skip if outside date range
+              if ((startDate && assessmentDate < startDate) || 
+                  (endDate && assessmentDate > endDate)) {
+                return;
+              }
+              
+              const type = assessment.type || 'Quiz'; // Default to Quiz if type is not specified
+              
+              assessmentsByType[type].push({
+                ...assessment,
+                date: assessment.date,
+                rawScore: scoreValue,
+                score: scorePercentage,
+                maxScore: maxScore,
+                number: assessment.number,
+                title: `${assessment.type} #${assessment.number}`
+              });
+            }
+          });
+        }
+      }
+      
+      // Get all assessments across all types
+      const allAssessments = [
+        ...(assessmentsByType['Quiz'] || []),
+        ...(assessmentsByType['Activity'] || []),
+        ...(assessmentsByType['Performance Task'] || [])
+      ];
+      
+      // Apply date filter to the history table
+      const filteredAssessments = allAssessments.filter(assessment => {
+        const assessmentDate = new Date(assessment.date);
+        const startDate = historyDateRange.value.start ? new Date(historyDateRange.value.start) : null;
+        const endDate = historyDateRange.value.end ? new Date(historyDateRange.value.end) : null;
+        
+        return (!startDate || assessmentDate >= startDate) && 
+               (!endDate || assessmentDate <= endDate);
+      });
+      
+      // Sort by date (newest first)
+      filteredAssessments.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      // Store in the selected student object
+      selectedStudent.value.assessmentHistory = filteredAssessments.map(assessment => ({
+        date: assessment.date,
+        type: assessment.title || `${assessment.type} #${assessment.number}`,
+        score: assessment.rawScore,
+        maxScore: assessment.maxScore,
+        percentage: assessment.score
+      }));
+      
+      console.log(`Updated assessment history with ${selectedStudent.value.assessmentHistory.length} records`);
+    };
+
+    // Helper function to get the student's score for an assessment
+    const getStudentScore = (student, assessment) => {
+      // Get the assessment ID
+      const assessmentId = assessment._id || assessment.id;
+      
+      // Check if the student has a score for this assessment
+      if (student.scores && (assessmentId in student.scores)) {
+        return student.scores[assessmentId];
+      }
+      
+      // Check if the assessment has a score for this student
+      if (assessment.scores) {
+        let score;
+        
+        // Handle both Map and plain object
+        if (assessment.scores instanceof Map) {
+          score = assessment.scores.get(student.studentNumber);
+        } else if (typeof assessment.scores === 'object') {
+          score = assessment.scores[student.studentNumber];
+        }
+        
+        if (score !== undefined) {
+          // Store the score in the student object for future reference
+          if (!student.scores) {
+            student.scores = {};
+          }
+          student.scores[assessmentId] = score;
+          return score;
+        }
+      }
+      
+      // No score found
+      return '';
+    };
+
     return {
       selectedYear,
       selectedSection,
@@ -2384,120 +4129,27 @@ export default {
       attendanceStatistics,
       fetchAttendance,
       syncStudentRecords,
-      redirectToAttendance
+      redirectToAttendance,
+      currentPage,
+      totalPages,
+      paginatedStudents,
+      paginationInfo,
+      nextPage,
+      previousPage,
+      createPerformanceChart,
+      loadLastUsedFilters, // Add the new function
+      saveToRecentFilters, // Add the new function
+      getStudentScore,
     }
   }
 }
 </script>
 
 <style scoped>
-/* Remove the top-navbar styles */
+/* Remove all modal-related styles since they're now in StudentDetailsModal.vue */
+/* Keep only the styles needed for the main component */
 .class-records {
-  padding: 1.5rem 2rem;
-  background:rgb(255, 255, 255);
-  min-height: calc(100vh - 70px);
-}
-
-/* Add styles for date navigation */
-.date-display {
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: #495057;
-  padding: 0.5rem 1rem;
-  background: #fff;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  min-width: 300px;
-  text-align: center;
-}
-
-.btn-outline-primary {
-  padding: 0.5rem 1rem;
-  transition: all 0.2s ease;
-}
-
-.btn-outline-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.card {
-  background: white;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.table {
-  margin-bottom: 0;
-}
-
-.table th {
-  background-color: #f8f9fa;
-  color: #666;
-  font-weight: 600;
-  padding: 0.75rem 1rem;
-  border-top: none;
-  white-space: nowrap;
-  text-align: left;
-}
-
-.table td {
-  padding: 0.75rem 1rem;
-  vertical-align: middle;
-  border-color: #eee;
-  text-align: left;
-}
-
-.table tbody tr:hover {
-  background-color: #f8f9fa;
-}
-
-.btn {
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.btn i {
-  font-size: 0.875rem;
-}
-
-.btn-outline-secondary {
-  border: 1px solid #dee2e6;
-  color: #6c757d;
-  background-color: white;
-}
-
-.btn-outline-secondary:hover {
-  background-color: #f8f9fa;
-  border-color: #dee2e6;
-  color: #495057;
-}
-
-.btn-primary {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-}
-
-.btn-primary:hover {
-  background-color: #002347;
-  border-color: #002347;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  border-color: #6c757d;
-}
-
-.btn-secondary:hover {
-  background-color: #5a6268;
-  border-color: #545b62;
+  padding: 1.5rem;
 }
 
 .table-controls {
@@ -2527,23 +4179,12 @@ export default {
   color: #2d3748;
 }
 
-.btn-control:focus {
-  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.25);
-}
-
 .control-menu {
   border: none;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   padding: 0.5rem 0;
   margin-top: 0.5rem;
-  position: absolute;
-  z-index: 1000;
-  background: white;
-}
-
-.btn-control::after {
-  display: none;
 }
 
 .dropdown-item {
@@ -2553,11 +4194,6 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  white-space: nowrap;
-}
-
-.dropdown-item i:last-child {
-  margin-left: auto;
 }
 
 .filter-badge {
@@ -2581,605 +4217,88 @@ export default {
   max-width: 400px;
 }
 
-.search-control .input-group {
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.search-control .input-group-text {
+.table-responsive {
   background: white;
-  border: 1px solid #e2e8f0;
-  border-right: none;
-  color: #718096;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
-.search-control .form-control {
-  border: 1px solid #e2e8f0;
-  border-left: none;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
+.table th {
+  background-color: #f8f9fa;
+  color: #666;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border-top: none;
+  white-space: nowrap;
 }
 
-.search-control .form-control:focus {
-  box-shadow: none;
-  border-color: #e2e8f0;
+.table td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  border-color: #eee;
 }
 
-.search-control .btn-outline-secondary {
-  border: 1px solid #e2e8f0;
-  border-left: none;
-  color: #718096;
+.table tbody tr:hover {
+  background-color: #f8f9fa;
+  cursor: pointer;
 }
 
-.search-control .btn-outline-secondary:hover {
-  background: #f8fafc;
-  color: #4a5568;
-}
-
-/* Form Controls */
-.form-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #4a5568;
-  margin-bottom: 0.3rem;
-}
-
-.form-select {
+.score-input {
+  width: 80px;
+  text-align: center;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
-  font-size: 0.9rem;
-  color: #4a5568;
-  background-color: white;
+  padding: 0.25rem;
 }
 
-.form-select:focus {
-  border-color: #90cdf4;
+.score-input:focus {
+  border-color: #4299e1;
   box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.25);
+  outline: none;
 }
 
-.btn-light {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #4a5568;
-}
-
-.btn-light:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #2d3748;
-}
-
-.btn-primary {
-  background: #4299e1;
-  border: none;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #3182ce;
+.date-display {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #495057;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  min-width: 200px;
+  text-align: center;
 }
 
 .empty-state-message {
-  padding: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: #6c757d;
 }
 
 .empty-state-message i {
   font-size: 2rem;
-  display: block;
-  margin-bottom: 0.5rem;
 }
 
-.empty-state-message p {
-  margin: 0;
-  color: #6c757d;
-}
-
-.clickable-row {
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.clickable-row:hover {
-  background-color: rgba(0, 51, 102, 0.05) !important;
-}
-
-.form-control:focus,
-.form-select:focus {
-  border-color: #003366;
-  box-shadow: 0 0 0 0.2rem rgba(0, 51, 102, 0.25);
-}
-
-.gap-2 {
-  gap: 0.5rem;
-}
-
-.modal-wrapper {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-.modal {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 9998;
-  cursor: pointer;
-}
-
-.modal-dialog {
-  position: relative;
-  width: 100%;
-  max-width: 1200px;
-  margin: 1.75rem;
-  pointer-events: auto;
-}
-
-.modal-content {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  background-color: #fff;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-  z-index: 10001;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.5rem;
-  background: #203464;
-  color: #fff;
-  border-top-left-radius: 15px;
-  border-top-right-radius: 15px;
-}
-
-.modal-body {
-  position: relative;
-  flex: 1 1 auto;
-  padding: 1.5rem;
-  max-height: calc(100vh - 210px);
-  overflow-y: auto;
-}
-
-.btn-close {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 1.5rem;
-  padding: 0.5rem;
-  cursor: pointer;
-  opacity: 0.75;
-  transition: opacity 0.2s;
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.btn-close:hover {
-  opacity: 1;
-  background-color: rgba(255, 255, 255, 0.3);
-}
-
-.btn-close::before {
-  content: "×";
-  position: absolute;
-  font-size: 24px;
-  line-height: 1;
-  color: white;
-}
-
-/* Ensure form-check elements are clickable in the modal */
-.modal .form-check {
-  position: relative;
-  z-index: 1061;
-}
-
-/* Student Details Modal Styles */
-.student-info-card,
-.performance-card,
-.history-card {
+.pagination-controls {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.student-info-header,
-.performance-header,
-.history-header {
-  background: #203464;
-  color: white;
-  padding: 1rem 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
-  padding: 1.5rem;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.info-item label {
-  font-size: 0.875rem;
-  color: #6c757d;
-  margin-bottom: 0.25rem;
-}
-
-.info-item span {
-  font-size: 1rem;
-  color: #212529;
-  font-weight: 500;
-}
-
-.chart-container {
   padding: 1rem;
-  height: 300px;
+  border-top: 1px solid #e2e8f0;
 }
 
-.chart-container h6 {
-  text-align: center;
-  margin-bottom: 1rem;
-  color: #495057;
-}
-
-.history-content {
-  padding: 1.5rem;
-}
-
-.badge {
-  padding: 0.5em 0.75em;
-  font-weight: 500;
-  border-radius: 6px;
-}
-
-.chart-container {
-  background: #fff;
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
-  height: 300px;
-  margin-bottom: 1rem;
-  transition: all 0.3s ease;
-}
-
-.chart-container:hover {
-  border-color: #203464;
-}
-
-.chart-container h6 {
-  color: #203464;
-  font-weight: 600;
-  font-size: 1rem;
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-.badge {
-  padding: 0.5em 0.75em;
-  font-weight: 500;
-  font-size: 0.875rem;
-  border-radius: 6px;
-}
-
-.badge-quiz {
-  background: linear-gradient(135deg, #4e73df 0%, #3867d6 100%);
-  color: white;
-}
-
-.badge-activity {
-  background: linear-gradient(135deg, #1cc88a 0%, #16a085 100%);
-  color: white;
-}
-
-.badge-performance {
-  background: linear-gradient(135deg, #f6c23e 0%, #f39c12 100%);
-  color: white;
-}
-
-.history-card .table {
-  margin: 0;
-}
-
-.history-card .table th {
-  background: #203464;
-  font-weight: 600;
-  color: #fff;
-  padding: 1rem;
-  border: none;
-}
-
-.history-card .table td {
-  padding: 1rem;
-  vertical-align: middle;
-  border-color: #f8f9fa;
-}
-
-.history-card .table tr:hover {
-  background: rgba(32, 52, 100, 0.05);
-}
-
-.modal-content {
-  border: none;
-  border-radius: 15px;
-  overflow: hidden;
-}
-
-.modal-header {
-  background-color: #203464 !important;
-  color: #fff !important;
-  border-bottom: none;
-}
-
-.btn-close {
-  color: #fff !important;
-  opacity: 0.75;
-}
-
-.btn-close:hover {
-  opacity: 1;
-}
-
-.score-input {
-  width: 60px !important;
-  padding: 0.25rem !important;
-  text-align: center;
-  font-size: 0.875rem;
-  height: auto !important;
-  min-height: 30px;
-  margin: 0 auto;
-  display: block;
-}
-
-.score-input::-webkit-inner-spin-button,
-.score-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.score-input[type=number] {
-  -webkit-appearance: textfield;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-/* Table alignment styles */
-.table th, .table td {
-  text-align: center !important;
-  vertical-align: middle !important;
-  padding: 0.75rem 0.5rem !important;
-}
-
-.table td:nth-child(-n+3),
-.table th:nth-child(-n+3) {
-  text-align: left !important;
-  padding-left: 1rem !important;
-  padding-right: 1rem !important;
-}
-
-.assessment-header {
-  text-align: center;
-  cursor: pointer;
-  padding: 0.25rem;
-  transition: background-color 0.2s ease;
-  white-space: nowrap;
-  min-width: 100px;
-  max-width: 120px;
-  margin: 0 auto;
-  display: block;
-}
-
-.assessment-header:hover {
-  background-color: rgba(0, 51, 102, 0.05);
-}
-
-.assessment-header small {
-  display: block;
-  color: #6c757d;
-  font-size: 0.75rem;
-  margin-top: 0.25rem;
-  text-align: center;
-}
-
-td:has(.score-input) {
-  text-align: center !important;
-  vertical-align: middle !important;
-  padding: 0.5rem 0.25rem !important;
-}
-
-/* Add styles for filters */
-.date-filter button {
-  font-size: 0.875rem;
-  padding: 0.375rem 1rem;
-  border-radius: 6px;
-  white-space: nowrap;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  transition: all 0.2s ease;
-}
-
-.date-filter button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-.assessment-filter .form-select {
-  font-size: 0.875rem;
-  padding: 0.25rem 2rem 0.25rem 0.75rem;
-  border-radius: 6px;
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  min-width: 120px;
-}
-
-.assessment-filter .form-select:focus {
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.1);
-}
-
-.assessment-filter .form-select option {
-  background-color: #203464;
-  color: #fff;
-}
-
-.performance-header,
-.history-header {
-  display: flex;
-  align-items: center;
-  padding: 1rem 1.5rem;
-}
-
-.modal-dialog {
-  margin: 1.75rem auto;
-}
-
-.modal-content {
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.modal-header {
-  background-color: #203464;
-  color: #fff;
-  border-bottom: none;
-  padding: 1rem 1.5rem;
-}
-
-.modal-body {
-  padding: 1.5rem;
-}
-
-.form-label {
-  font-weight: 500;
-  color: #495057;
-  margin-bottom: 0.5rem;
-}
-
-.form-control[type="date"] {
-  padding: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #dee2e6;
-}
-
-.form-control[type="date"]:focus {
-  border-color: #203464;
-  box-shadow: 0 0 0 0.2rem rgba(32, 52, 100, 0.25);
-}
-
-.btn-close {
-  color: #fff;
-  opacity: 0.75;
-}
-
-.btn-close:hover {
-  opacity: 1;
-}
-
-/* Add specific class for date filter modals */
-.modal-dialog.date-filter-dialog {
-  max-width: 400px;
-}
-
-/* Update modal styles */
-.modal-content {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  background-color: #fff;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-  z-index: 10001;
-}
-
-.modal-body {
-  position: relative;
-  flex: 1 1 auto;
-  padding: 1.5rem;
-  max-height: calc(100vh - 210px);
-  overflow-y: auto;
-}
-
-/* Date filter specific styles */
-.date-filter button {
-  font-size: 0.875rem;
-  padding: 0.375rem 1rem;
-  border-radius: 6px;
-  white-space: nowrap;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  transition: all 0.2s ease;
-}
-
-.date-filter button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-/* Form control styles for date inputs */
-input[type="date"].form-control {
-  padding: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #dee2e6;
-  width: 100%;
+.pagination-info {
+  color: #4a5568;
   font-size: 0.9rem;
 }
 
-input[type="date"].form-control:focus {
-  border-color: #203464;
-  box-shadow: 0 0 0 0.2rem rgba(32, 52, 100, 0.25);
+.pagination-buttons .btn {
+  min-width: 100px;
 }
 
-/* Update modal-sm styles */
-.modal-sm {
-  max-width: 400px !important;
-  margin: 1.75rem auto;
-}
-
-.modal-wrapper {
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -3191,7 +4310,18 @@ input[type="date"].form-control:focus {
   z-index: 9999;
 }
 
-.modal {
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 9998;
+}
+
+.modal-wrapper {
   position: relative;
   width: 100%;
   height: 100%;
@@ -3201,20 +4331,11 @@ input[type="date"].form-control:focus {
   z-index: 10000;
 }
 
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 9998;
-  cursor: pointer;
-}
-
 .modal-dialog {
   position: relative;
-  width: 100%;
+  width: 90%;
+  max-width: 600px;
+  margin: 1.75rem auto;
   pointer-events: auto;
 }
 
@@ -3223,486 +4344,34 @@ input[type="date"].form-control:focus {
   display: flex;
   flex-direction: column;
   width: 100%;
+  pointer-events: auto;
   background-color: #fff;
+  background-clip: padding-box;
   border: none;
-  border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-  z-index: 10001;
-}
-
-/* Updated Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1050;
-}
-
-.modal-wrapper {
-  position: relative;
-  width: 100%;
-  margin: 1.75rem;
-  pointer-events: auto;
-}
-
-.modal-dialog {
-  position: relative;
-  pointer-events: auto;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1051;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  outline: 0;
+  max-height: calc(100vh - 3.5rem);
+  overflow-y: auto;
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
-  background: #203464;
-  color: #fff;
-  border-top-left-radius: 15px;
-  border-top-right-radius: 15px;
-}
-
-.modal-body {
   padding: 1.5rem;
-  max-height: calc(100vh - 210px);
-  overflow-y: auto;
+  border-bottom: 1px solid #dee2e6;
+  border-top-left-radius: calc(0.5rem - 1px);
+  border-top-right-radius: calc(0.5rem - 1px);
 }
 
-.btn-close {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 1.5rem;
-  padding: 0.5rem;
-  cursor: pointer;
-  opacity: 0.75;
-  transition: opacity 0.2s;
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.btn-close:hover {
-  opacity: 1;
-  background-color: rgba(255, 255, 255, 0.3);
-}
-
-.btn-close::before {
-  content: "×";
-  position: absolute;
-  font-size: 24px;
-  line-height: 1;
-  color: white;
-}
-
-/* Form Styles */
-.form-label {
-  font-weight: 500;
-  color: #495057;
-  margin-bottom: 0.5rem;
-}
-
-.form-control,
-.form-select {
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-}
-
-.form-control:focus,
-.form-select:focus {
-  border-color: #203464;
-  box-shadow: 0 0 0 0.2rem rgba(32, 52, 100, 0.25);
-}
-
-/* Button Styles */
-.btn {
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-weight: 500;
-}
-
-.btn-primary {
-  background-color: #203464;
-  border-color: #203464;
-}
-
-.btn-primary:hover {
-  background-color: #162544;
-  border-color: #162544;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  border-color: #6c757d;
-}
-
-.btn-secondary:hover {
-  background-color: #5a6268;
-  border-color: #545b62;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  border-color: #dc3545;
-}
-
-.btn-danger:hover {
-  background-color: #c82333;
-  border-color: #bd2130;
-}
-
-/* Base z-index hierarchy */
-:root {
-  --z-sidebar: 1000;
-  --z-modal-backdrop: 1040;
-  --z-modal-overlay: 1050;
-  --z-modal-wrapper: 1060;
-  --z-modal-content: 1070;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal-overlay);
-  backdrop-filter: blur(5px);
-}
-
-.modal-wrapper {
-  position: relative;
-  width: 100%;
-  max-width: 500px;
-  margin: 1.75rem;
-  z-index: var(--z-modal-wrapper);
-}
-
-.modal-content {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  background-color: #fff;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-  z-index: var(--z-modal-content);
-}
-
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: var(--z-modal-backdrop);
-  cursor: pointer;
-}
-
-/* Ensure sidebar is hidden when modal is open */
-.modal-overlay ~ .sidebar {
-  z-index: var(--z-sidebar);
-  visibility: hidden;
-}
-
-/* Update modal-dialog styles */
-.modal-dialog {
-  position: relative;
-  width: 100%;
-  pointer-events: auto;
-  z-index: var(--z-modal-wrapper);
-}
-
-/* Ensure proper stacking for nested modals */
-.modal-overlay .modal-overlay {
-  z-index: calc(var(--z-modal-overlay) + 10);
-}
-
-.modal-overlay .modal-wrapper {
-  z-index: calc(var(--z-modal-wrapper) + 10);
-}
-
-.modal-overlay .modal-content {
-  z-index: calc(var(--z-modal-content) + 10);
-}
-
-.modal-overlay .modal-backdrop {
-  z-index: calc(var(--z-modal-backdrop) + 10);
-}
-
-/* Remove the style that was causing the issue */
-.modal-backdrop {
-  z-index: var(--z-modal-backdrop) !important;
-}
-
-/* Ensure modal body is above backdrop */
 .modal-body {
   position: relative;
-  z-index: calc(var(--z-modal-content) + 1);
+  flex: 1 1 auto;
+  padding: 1.5rem;
 }
 
-/* Update student details modal styles */
-.modal-dialog.modal-xl {
-  max-width: 1200px;
-}
-
-/* Ensure form elements are clickable */
-.modal-content form {
-  position: relative;
-  z-index: calc(var(--z-modal-content) + 2);
-}
-
-/* Update form controls to ensure they're above backdrop */
-.modal-content .form-control,
-.modal-content .form-select,
-.modal-content .btn {
-  position: relative;
-  z-index: calc(var(--z-modal-content) + 3);
-}
-
-/* Date picker specific styles */
-.modal .date-filter {
-  position: relative;
-}
-
-.modal .date-filter .modal-dialog {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin: 0.5rem 0;
-  z-index: var(--z-datepicker);
-}
-
-/* Date picker styles */
-.date-input-container {
-  position: relative;
-  display: inline-block;
-}
-
-.date-picker-dropdown {
-  position: fixed;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  padding: 12px;
-  min-width: 250px;
-  z-index: var(--z-datepicker);
-}
-
-.date-filter {
-  position: relative;
-}
-
-.date-filter .form-control {
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
-  width: 150px;
-  cursor: pointer;
-  z-index: 1;
-}
-
-.date-filter .form-control:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.date-filter span {
-  padding: 0 0.5rem;
-  color: white;
-}
-
-/* Ensure proper stacking context */
-.history-card {
-  position: relative;
-  overflow: visible !important;
-}
-
-.history-header {
-  position: relative;
-  overflow: visible;
-  z-index: 1;
-}
-
-/* Add these new styles at the end of your existing styles */
-.table-slide-container {
-  position: relative;
-  transition: transform 0.3s ease-in-out;
-}
-
-.table-slide-container.slide-left {
-  animation: slideLeft 0.3s ease-in-out;
-}
-
-.table-slide-container.slide-right {
-  animation: slideRight 0.3s ease-in-out;
-}
-
-@keyframes slideLeft {
-  0% {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes slideRight {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.table-responsive {
-  overflow: hidden;
-}
-
-/* Update button disabled state */
-.btn-outline-primary:disabled {
-  background-color: #e9ecef;
-  border-color: #dee2e6;
-  color: #6c757d;
-  cursor: not-allowed;
-}
-
-/* Add styles for modal background blur */
-.modal-overlay {
-  backdrop-filter: blur(5px);
-}
-
-/* Ensure modal closes when clicking outside */
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 9998;
-  cursor: pointer;
-}
-
-/* Class Record Title Styles */
-.class-record-title {
-  background: #203464;
-  color: white;
-  padding: 1.5rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.class-record-title h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-/* Add TopNav Title styles */
-.top-nav-title {
-  background: #203464;
-  color: white;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-}
-
-.top-nav-title h4 {
-  font-size: 1.25rem;
-  font-weight: 500;
-  margin: 0;
-}
-
-/* Add new styles for attendance status */
-.status-present {
-  background-color: #4CAF50;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-.status-absent {
-  background-color: #f44336;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-.status-late {
-  background-color: #FFC107;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-/* Update modal styles for better layering */
-.modal-overlay {
-  background-color: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(5px);
-  z-index: var(--z-modal-overlay);
-}
-
-.modal-wrapper {
-  z-index: var(--z-modal-wrapper);
-}
-
-.modal-content {
-  z-index: var(--z-modal-content);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-/* Add chart container styles */
-.chart-container {
-  position: relative;
-  height: 300px;
-  padding: 20px;
-}
-
-.performance-card,
-.history-card {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+.modal-xxl {
+  max-width: 1400px;
 }
 </style>

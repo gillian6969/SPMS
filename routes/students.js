@@ -178,13 +178,13 @@ router.get('/by-section', auth, async (req, res) => {
       role: 'student',
       year,
       section
-    }).select('_id studentId firstName lastName year section');
+    }).select('_id studentId firstName lastName email year section');
 
     // Find students in Student model
     const studentModels = await Student.find({
       year,
       section
-    }).select('_id studentId firstName lastName year section');
+    }).select('_id studentId firstName lastName email year section');
 
     console.log('Students found in User model:', userStudents.length);
     console.log('Students found in Student model:', studentModels.length);
@@ -205,6 +205,7 @@ router.get('/by-section', auth, async (req, res) => {
         studentId: student.studentId,
         firstName: student.firstName,
         lastName: student.lastName,
+        email: student.email,
         year: student.year,
         section: student.section
       };
@@ -255,12 +256,12 @@ router.get('/', auth, async (req, res) => {
     
     // Find students in User model
     const userStudents = await User.find(userQuery)
-      .select('_id studentId firstName lastName year section')
+      .select('_id studentId firstName lastName email year section')
       .sort({ lastName: 1, firstName: 1 });
     
     // Find students in Student model
     const studentModels = await Student.find(studentQuery)
-      .select('_id studentId firstName lastName year section')
+      .select('_id studentId firstName lastName email year section')
       .sort({ lastName: 1, firstName: 1 });
     
     console.log('Students found in User model:', userStudents.length);
@@ -282,6 +283,7 @@ router.get('/', auth, async (req, res) => {
         studentId: student.studentId,
         firstName: student.firstName,
         lastName: student.lastName,
+        email: student.email,
         year: student.year,
         section: student.section
       };
@@ -450,6 +452,83 @@ router.delete('/:id', auth, async (req, res) => {
     await student.deleteOne();
     res.json({ message: 'Student removed' });
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Add a single student
+router.post('/', auth, async (req, res) => {
+  try {
+    const { 
+      studentId, 
+      firstName, 
+      middleName, 
+      lastName, 
+      email, 
+      contactNumber, 
+      year, 
+      section,
+      academicYears
+    } = req.body;
+
+    // Validate required fields
+    if (!studentId || !firstName || !middleName || !lastName || !email || !contactNumber || !year || !section) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    // Check if student already exists
+    const existingStudent = await Student.findOne({
+      $or: [
+        { studentId },
+        { email }
+      ]
+    });
+
+    if (existingStudent) {
+      return res.status(400).json({ 
+        message: 'Student already exists with this ID or email',
+        field: existingStudent.studentId === studentId ? 'studentId' : 'email'
+      });
+    }
+
+    // Hash the password (using student ID as default password)
+    const salt = await bcryptjs.genSalt(10);
+    const hashedPassword = await bcryptjs.hash(studentId, salt);
+
+    // Create new student
+    const student = new Student({
+      studentId,
+      firstName,
+      middleName,
+      lastName,
+      email,
+      contactNumber,
+      password: hashedPassword,
+      year,
+      section,
+      academicYears: academicYears || {
+        startYear: new Date().getFullYear(),
+        endYear: new Date().getFullYear() + 4
+      }
+    });
+
+    await student.save();
+
+    // Return success response
+    res.status(201).json({
+      message: 'Student added successfully',
+      student: {
+        _id: student._id,
+        studentId: student.studentId,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        email: student.email,
+        year: student.year,
+        section: student.section
+      }
+    });
+  } catch (error) {
+    console.error('Error adding student:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

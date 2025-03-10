@@ -1,7 +1,21 @@
 <template>
   <div class="student-management">
-    <!-- Table Container -->
-    <div class="table-container">
+    <div class="sticky-controls">
+      <div class="d-flex gap-2 mb-3">
+        <button 
+          class="btn btn-primary" 
+          @click="showAddStudentModal = true"
+        >
+          <i class="fas fa-plus me-1"></i> Add Student List
+        </button>
+        <button 
+          class="btn btn-success" 
+          @click="showAddSingleStudentModal = true"
+        >
+          <i class="fas fa-user-plus me-1"></i> Add Single Student
+        </button>
+      </div>
+    
         <!-- Table Controls -->
         <div class="table-controls mb-3">
         <div class="d-flex justify-content-between align-items-center">
@@ -44,24 +58,43 @@
                 data-bs-toggle="dropdown" 
                 aria-expanded="false"
               >
-                <i class="fas fa-filter me-2"></i> View Section
+                <i class="fas fa-filter me-2"></i> 
+                {{ hasActiveFilters ? `${selectedYear || 'All Years'} - ${selectedSection || 'All Sections'}` : 'Filter Students' }}
                 <span v-if="hasActiveFilters" class="filter-badge">!</span>
               </button>
               <div class="dropdown-menu shadow-lg p-3" aria-labelledby="filterDropdown">
-                <h6 class="dropdown-header px-0 mb-2">Available Sections</h6>
-                <div class="mb-3">
-                  <div v-if="teacherSections.length === 0" class="text-muted">
-                    No sections available
-                  </div>
-                  <div v-for="section in teacherSections" :key="section.id" class="mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="dropdown-header px-0 mb-0">Filter Options</h6>
                     <button 
-                      class="btn btn-outline-primary w-100 text-start"
-                      @click="selectSection(section)"
+                    v-if="hasActiveFilters"
+                    class="btn btn-sm btn-outline-secondary"
+                    @click="clearFilters"
                     >
-                      {{ section.year }} - {{ section.section }}
+                    Clear Filters
                     </button>
                   </div>
+                
+                <!-- Year Filter -->
+                <div class="mb-3">
+                  <label class="form-label">Year Level</label>
+                  <select class="form-select mb-2" v-model="selectedYear" @change="applyFilters">
+                    <option value="">All Years</option>
+                    <option value="1st">1st Year</option>
+                    <option value="2nd">2nd Year</option>
+                    <option value="3rd">3rd Year</option>
+                    <option value="4th">4th Year</option>
+                  </select>
                 </div>
+                
+                <!-- Section Filter -->
+                <div class="mb-3">
+                  <label class="form-label">Section</label>
+                  <select class="form-select" v-model="selectedSection" @change="applyFilters">
+                    <option value="">All Sections</option>
+                    <option value="South 1">South 1</option>
+                    <option value="South 2">South 2</option>
+                    <option value="South 3">South 3</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -91,15 +124,7 @@
             </div>
           </div>
         </div>
-
-        <div class="d-flex gap-2 mb-3">
-          <button 
-            class="btn btn-primary" 
-            @click="syncStudentRecords"
-            :disabled="!selectedYear || !selectedSection"
-          >
-            <i class="fas fa-sync-alt me-1"></i> Sync Student Records
-          </button>
+      </div>
         </div>
 
         <div class="table-responsive">
@@ -115,9 +140,9 @@
               </tr>
             </thead>
             <tbody>
-              <template v-if="sortedStudents.length > 0">
+          <template v-if="paginatedStudents.length > 0">
                 <tr 
-                  v-for="student in sortedStudents" 
+              v-for="student in paginatedStudents" 
                   :key="student.studentId"
                   @click="viewStudent(student)"
                   class="clickable-row"
@@ -143,18 +168,39 @@
               </tr>
             </tbody>
           </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls mt-3 d-flex justify-content-between align-items-center">
+      <div class="pagination-info">
+        Showing {{ paginationInfo.start }} to {{ paginationInfo.end }} of {{ sortedStudents.length }} entries
+      </div>
+      <div class="pagination-buttons">
+        <button 
+          class="btn btn-outline-primary me-2" 
+          @click="previousPage" 
+          :disabled="currentPage === 1"
+        >
+          <i class="fas fa-chevron-left me-1"></i> Previous
+        </button>
+        <button 
+          class="btn btn-outline-primary" 
+          @click="nextPage" 
+          :disabled="currentPage >= totalPages"
+        >
+          Next <i class="fas fa-chevron-right ms-1"></i>
+        </button>
       </div>
     </div>
 
     <!-- Add Student Modal -->
-    <div v-if="showAddStudentModal" class="modal-wrapper">
-      <div class="modal-backdrop" @click="showAddStudentModal = false"></div>
-      <div class="modal">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showAddStudentModal" class="add-student-modal">
+      <div class="add-student-backdrop" @click="showAddStudentModal = false"></div>
+      <div class="add-student-dialog">
+        <div class="add-student-content">
+          <div class="modal-header bg-primary text-white">
             <h5 class="modal-title">Add Student List</h5>
-            <button type="button" class="btn-close" @click="showAddStudentModal = false"></button>
+            <button type="button" class="btn-close btn-close-white" @click="showAddStudentModal = false"></button>
           </div>
           <div class="modal-body">
             <form @submit.prevent="handleFileUpload">
@@ -163,7 +209,7 @@
                 <label class="form-label">Year Level</label>
                 <select class="form-select" v-model="uploadYear" required>
                   <option value="">Select Year</option>
-                  <option v-for="year in availableYears" :value="year">{{ year }}</option>
+                  <option v-for="year in availableYears" :key="year" :value="year">{{ year }}</option>
                 </select>
                 <small class="text-muted d-block mt-1">
                   Note: Sections will be automatically assigned based on the number of students (50 students per section).
@@ -181,10 +227,13 @@
                   required
                 >
                 <small class="text-muted d-block mt-1">
-                  Required fields: StudentID, LastName, FirstName, MiddleName, ContactNumber, Email
+                  <strong>Required fields:</strong> StudentID, LastName, FirstName, MiddleName, ContactNumber, Email
                 </small>
                 <small class="text-muted d-block mt-1">
-                  File must be in CSV format
+                  <strong>Important:</strong> Make sure the CSV file has an "Email" column with valid email addresses.
+                </small>
+                <small class="text-muted d-block mt-1">
+                  File must be in CSV format with headers matching the required fields exactly.
                 </small>
               </div>
 
@@ -197,7 +246,6 @@
                 </button>
               </div>
             </form>
-            </div>
           </div>
         </div>
       </div>
@@ -375,19 +423,115 @@
         </div>
       </div>
     </div>
+
+    <!-- Add Single Student Modal -->
+    <div v-if="showAddSingleStudentModal" class="modal-wrapper">
+      <div class="modal-backdrop" @click="showAddSingleStudentModal = false"></div>
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-success text-white">
+            <h5 class="modal-title">
+              <i class="fas fa-user-plus me-2"></i>
+              Add Single Student
+            </h5>
+            <button type="button" class="btn-close btn-close-white" @click="showAddSingleStudentModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <form @submit.prevent="handleAddSingleStudent">
+              <div class="mb-3">
+                <label class="form-label">Student ID <span class="text-danger">*</span></label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  v-model="newStudent.studentId"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label class="form-label">First Name <span class="text-danger">*</span></label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  v-model="newStudent.firstName"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Middle Name <span class="text-danger">*</span></label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  v-model="newStudent.middleName"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Last Name <span class="text-danger">*</span></label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  v-model="newStudent.lastName"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Email <span class="text-danger">*</span></label>
+                <input 
+                  type="email" 
+                  class="form-control" 
+                  v-model="newStudent.email"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Contact Number <span class="text-danger">*</span></label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  v-model="newStudent.contactNumber"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Year <span class="text-danger">*</span></label>
+                <select class="form-select" v-model="newStudent.year" required>
+                  <option value="">Select Year</option>
+                  <option v-for="year in availableYears" :key="year" :value="year">{{ year }}</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Section <span class="text-danger">*</span></label>
+                <select class="form-select" v-model="newStudent.section" required>
+                  <option value="">Select Section</option>
+                  <option v-for="section in availableSections" :key="section" :value="section">{{ section }}</option>
+                </select>
+              </div>
+              <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" @click="showAddSingleStudentModal = false">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-success" :disabled="isAddingStudent">
+                  {{ isAddingStudent ? 'Adding...' : 'Add Student' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useStore } from 'vuex'
 import axios from 'axios'
 import Chart from 'chart.js/auto'
 import { Dropdown } from 'bootstrap'
 
-// Create axios instance without initial token
+// Create axios instance with correct base URL
 const api = axios.create({
-  baseURL: '/api/students',
+  baseURL: 'http://localhost:8081/api',
   headers: {
     'Content-Type': 'application/json'
   }
@@ -408,55 +552,99 @@ export default {
     const isEditing = ref(false)
     const editingStudent = ref(null)
     const showSearch = ref(false)
-    const teacherSections = ref([])
+const selectedYear = ref('')
+const selectedSection = ref('')
+const selectedFile = ref(null)
+const uploadYear = ref('')
+const isUploading = ref(false)
+const subjectChart = ref(null)
+const attendanceChart = ref(null)
+const historyStartDate = ref('')
+const historyEndDate = ref('')
+const showStartDatePicker = ref(false)
+const showEndDatePicker = ref(false)
+const showAddStudentModal = ref(false)
+const showAddSingleStudentModal = ref(false)
+const availableYears = ['1st', '2nd', '3rd', '4th']
+const availableSections = ['South 1', 'South 2', 'South 3']
+const newStudent = ref({
+  studentId: '',
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  email: '',
+  contactNumber: '',
+  year: '',
+  section: ''
+})
+const isAddingStudent = ref(false)
 
-    // Add teacherSections loading function
-    const loadTeacherSections = async () => {
-      try {
-        const token = store.state.auth.token;
-        const response = await axios.get('/api/teacher-class-records/sections', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        teacherSections.value = response.data;
-      } catch (error) {
-        console.error('Failed to load teacher sections:', error);
-        alert('Failed to load sections. Please try refreshing the page.');
-      }
-    };
+// Add pagination state
+const currentPage = ref(1)
+const itemsPerPage = 25
 
-    const selectSection = async (section) => {
-      try {
-        const token = store.state.auth.token;
-        const response = await axios.get('/api/students/by-section', {
-          params: {
-            year: section.year,
-            section: section.section
-          },
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        students.value = response.data;
-      } catch (error) {
-        console.error('Failed to fetch students:', error);
-        alert('Failed to load students. Please try again.');
-      }
-    };
+// Compute total pages
+const totalPages = computed(() => Math.ceil(sortedStudents.value.length / itemsPerPage))
+
+// Get paginated students
+const paginatedStudents = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  return sortedStudents.value.slice(start, end)
+})
+
+// Compute pagination info
+const paginationInfo = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage + 1
+  const end = Math.min(start + itemsPerPage - 1, sortedStudents.value.length)
+  return { start, end }
+})
+
+// Pagination methods
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
+
+const previousPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+// Reset pagination when filters change
+watch([searchQuery, selectedYear, selectedSection], () => {
+  currentPage.value = 1
+})
 
     // Initialize data on component mount
     onMounted(async () => {
       if (store.getters.isLoggedIn) {
-        await loadTeacherSections();
+    await fetchStudents();
       }
       
-      // Initialize all dropdowns
+  // Initialize dropdowns after a short delay to ensure DOM is ready
+  nextTick(() => {
       const dropdownElements = document.querySelectorAll('[data-bs-toggle="dropdown"]')
+    const dropdownInstances = []
+    
       dropdownElements.forEach(element => {
-        new Dropdown(element)
+      if (element) {
+        dropdownInstances.push(new Dropdown(element))
+      }
+    })
+
+    // Cleanup dropdowns on unmount
+    onUnmounted(() => {
+      dropdownInstances.forEach(dropdown => {
+        if (dropdown && typeof dropdown.dispose === 'function') {
+          dropdown.dispose()
+        }
       })
-    });
+    })
+  })
+})
 
     // Watch for auth state changes
     watch(() => store.state.auth.token, (newToken) => {
@@ -500,9 +688,16 @@ export default {
           throw new Error('No authentication token found')
         }
 
-        const response = await axios.post('/api/students/upload', formData, {
+    // Log the form data to verify what's being sent
+    console.log('Form data contents:', {
+      file: selectedFile.value,
+      year: uploadYear.value
+    })
+
+    const response = await api.post('/students/upload', formData, {
           headers: {
-            'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
           }
         })
 
@@ -522,183 +717,38 @@ export default {
         
         // Refresh student list and close modal
         await fetchStudents()
+    
+    // Debug: Check if emails are included in the fetched students after upload
+    console.log('Students after upload:', students.value);
+    if (students.value.length > 0) {
+      console.log('First student after upload:', students.value[0]);
+      console.log('Email field exists after upload:', 'email' in students.value[0]);
+      console.log('Email value after upload:', students.value[0].email);
+    }
+    
         showAddStudentModal.value = false
       } catch (error) {
-        console.error('Upload failed:', {
-          error: error,
-          response: error.response?.data,
-          status: error.response?.status
-        })
+    console.error('Upload failed:', error)
         alert('Error uploading file: ' + (error.response?.data?.message || error.message))
       } finally {
         isUploading.value = false
       }
     }
 
-    // Update viewStudent function to use createdAt
-    const viewStudent = async (student) => {
-      try {
-        selectedStudent.value = student;
-        
-        // Clear existing charts
-        if (subjectChart.value) {
-          const existingChart = Chart.getChart(subjectChart.value);
-          if (existingChart) {
-            existingChart.destroy();
-          }
-        }
-        if (attendanceChart.value) {
-          const existingChart = Chart.getChart(attendanceChart.value);
-          if (existingChart) {
-            existingChart.destroy();
-          }
-        }
-
-        const token = store.state.auth.token;
-        // Adjust dates for Philippine timezone when sending to API
-        let apiStartDate = historyStartDate.value ? new Date(historyStartDate.value) : undefined;
-        let apiEndDate = historyEndDate.value ? new Date(historyEndDate.value) : undefined;
-        
-        if (apiStartDate) {
-          apiStartDate.setUTCHours(0, 0, 0, 0);
-          apiStartDate.setHours(apiStartDate.getHours() + 8); // Adjust for Philippine timezone
-        }
-        if (apiEndDate) {
-          apiEndDate.setUTCHours(23, 59, 59, 999);
-          apiEndDate.setHours(apiEndDate.getHours() + 8); // Adjust for Philippine timezone
-        }
-
-        const response = await axios.get('/api/teacher-class-records/student/' + student._id + '/performance', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          params: {
-            startDate: apiStartDate?.toISOString() || undefined,
-            endDate: apiEndDate?.toISOString() || undefined
-          }
-        });
-        
-        const performanceData = response.data;
-
-        // Sort assessments by createdAt
-        if (performanceData.assessments) {
-          performanceData.assessments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-          selectedStudent.value.assessments = performanceData.assessments;
-        }
-
-        // Create subject performance chart using filtered data
-        const filteredData = filteredAssessments.value;
-        const quizAvg = calculateTypeAverage(filteredData, 'Quiz');
-        const activityAvg = calculateTypeAverage(filteredData, 'Activity');
-        const performanceTaskAvg = calculateTypeAverage(filteredData, 'Performance Task');
-
-        new Chart(subjectChart.value, {
-          type: 'bar',
-          data: {
-            labels: ['Quizzes', 'Activities', 'Performance Tasks'],
-            datasets: [{
-              label: 'Average Score (%)',
-              data: [quizAvg, activityAvg, performanceTaskAvg],
-              backgroundColor: [
-                'rgba(0, 51, 102, 0.7)',
-                'rgba(0, 51, 102, 0.5)',
-                'rgba(0, 51, 102, 0.3)'
-              ]
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              y: {
-                beginAtZero: true,
-                max: 100,
-                title: {
-                  display: true,
-                  text: 'Average Score (%)'
-                }
-              }
-            },
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top'
-              },
-              title: {
-                display: true,
-                text: 'Subject Performance Summary',
-                font: {
-                  size: 16
-                }
-              }
-            }
-          }
-        });
-
-        // Create attendance chart
-        new Chart(attendanceChart.value, {
-          type: 'doughnut',
-          data: {
-            labels: ['Present', 'Absent', 'Late'],
-            datasets: [{
-              data: [
-                performanceData.attendanceData?.present || 0,
-                performanceData.attendanceData?.absent || 0,
-                performanceData.attendanceData?.late || 0
-              ],
-              backgroundColor: [
-                'rgba(28, 200, 138, 0.8)',
-                'rgba(231, 74, 59, 0.8)',
-                'rgba(246, 194, 62, 0.8)'
-              ]
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              legend: {
-                position: 'bottom'
-              },
-              title: {
-                display: true,
-                text: 'Attendance Distribution',
-                font: {
-                  size: 16
-                }
-              }
-            }
-          }
-        });
-      } catch (error) {
-        console.error('Failed to fetch student performance:', error);
-        selectedStudent.value = student;
-      }
-    };
-
-    // Update formatDate function to handle createdAt
-    const formatDate = (dateString) => {
-      if (!dateString) return 'N/A';
-      const date = new Date(dateString);
-      // Adjust for Philippine timezone (UTC+8)
-      date.setHours(date.getHours() + 8);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Manila'
-      });
-    };
-
     // Filter students
     const filteredStudents = computed(() => {
       return students.value.filter(student => {
         const searchLower = searchQuery.value.toLowerCase();
-        return (
+const matchesSearch = 
           student.studentId.toLowerCase().includes(searchLower) ||
           student.firstName.toLowerCase().includes(searchLower) ||
-          student.lastName.toLowerCase().includes(searchLower)
-        );
+student.lastName.toLowerCase().includes(searchLower);
+
+// Apply year and section filters
+const matchesYear = !selectedYear.value || student.year === selectedYear.value;
+const matchesSection = !selectedSection.value || student.section === selectedSection.value;
+
+return matchesSearch && matchesYear && matchesSection;
       });
     });
 
@@ -714,28 +764,17 @@ export default {
     };
 
     const confirmDelete = (student) => {
-      if (confirm('Are you sure you want to delete this student? This will remove them from all teacher class records as well.')) {
-        deleteStudent(student)
-      }
+studentToDelete.value = student;
+showDeleteModal.value = true;
     }
 
     const deleteStudent = async (student) => {
       try {
         const token = store.state.auth.token;
 
-        // First, remove student from all teacher class records using student number
-        await axios.delete(
-          '/api/teacher-class-records/remove-all-records/' + student.studentId,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-
-          // Then delete the student from students collection using MongoDB _id
-        await axios.delete(
-          '/api/students/' + student._id,
+    // Delete the student from students collection using MongoDB _id
+    await api.delete(
+      '/students/' + student._id,
             {
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -750,17 +789,18 @@ export default {
         studentToDelete.value = null;
         alert('Student deleted successfully');
       } catch (error) {
-        console.error('Failed to delete student:', error.response?.data || error);
+    console.error('Failed to delete student:', error);
         alert('Failed to delete student. Please try again.');
       }
     }
 
-    const startEditing = () => {
+const startEditing = (student) => {
+  editingStudent.value = { ...student }
       isEditing.value = true
     }
 
     const cancelEditing = () => {
-      editingStudent.value = { ...selectedStudent.value }
+editingStudent.value = null
       isEditing.value = false
     }
 
@@ -768,8 +808,8 @@ export default {
       try {
         const token = store.state.auth.token
         
-        // First, update student information
-        const studentResponse = await axios.put('/api/students/' + editingStudent.value._id, {
+    // Update student information
+    const studentResponse = await api.put('/students/' + editingStudent.value._id, {
             studentId: editingStudent.value.studentId,
             firstName: editingStudent.value.firstName,
             lastName: editingStudent.value.lastName,
@@ -783,22 +823,6 @@ export default {
         })
 
         if (studentResponse.data) {
-          // Then update all teacher class records containing this student
-          const teacherUpdateResponse = await axios.put('/api/teacher-class-records/update-all-records', {
-              oldStudentNumber: selectedStudent.value.studentId,  // Original student number
-              newStudentNumber: editingStudent.value.studentId,   // New student number
-              firstName: editingStudent.value.firstName,
-              lastName: editingStudent.value.lastName,
-              year: editingStudent.value.year,
-              section: editingStudent.value.section,
-              studentId: editingStudent.value._id  // Include MongoDB ObjectId reference
-          }, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-          })
-
-          if (teacherUpdateResponse.data.success) {
             // Update local state
             const index = students.value.findIndex(s => s._id === editingStudent.value._id)
             if (index !== -1) {
@@ -809,14 +833,11 @@ export default {
             editingStudent.value = null
             isEditing.value = false
             alert('Student information updated successfully')
-          } else {
-            throw new Error('Failed to update teacher class records')
-          }
         } else {
           throw new Error('Failed to update student information')
         }
       } catch (error) {
-        console.error('Failed to update student:', error.response?.data || error)
+    console.error('Failed to update student:', error)
         alert('Failed to update student information. Please try again.')
       }
     }
@@ -868,208 +889,178 @@ export default {
       console.log('Searching for:', searchQuery.value)
     }
 
-    const editStudent = (student) => {
-      selectedStudent.value = student
-      editingStudent.value = { ...student }
-      isEditing.value = true
-    }
+const clearSearch = () => {
+searchQuery.value = ''
+handleSearch()
+}
 
-    const applyFilters = () => {
-      fetchStudents()
-    }
+// Add getAcademicYearRange function
+const getAcademicYearRange = (year) => {
+const currentYear = new Date().getFullYear()
+let yearNumber = 0
 
-    // Watch for filter changes
-    watch([selectedYear, selectedSection], () => {
-      fetchStudents()
+switch(year) {
+case '1st':
+yearNumber = 1
+break
+case '2nd':
+yearNumber = 2
+break
+case '3rd':
+yearNumber = 3
+break
+case '4th':
+yearNumber = 4
+break
+default:
+return 'N/A'
+}
+
+const startYear = currentYear - yearNumber + 1
+return `${startYear} - ${startYear + 1}`
+}
+
+// Add hasActiveFilters computed property
+const hasActiveFilters = computed(() => {
+return selectedYear.value || selectedSection.value;
+});
+
+// Add viewStudent function
+const viewStudent = (student) => {
+selectedStudent.value = student;
+// Initialize charts if needed
+if (performanceChart.value) {
+const ctx = performanceChart.value.getContext('2d');
+// Add your chart initialization logic here
+}
+};
+
+// Add clearFilters function
+const clearFilters = () => {
+selectedYear.value = '';
+selectedSection.value = '';
+searchQuery.value = '';
+};
+
+const applyFilters = () => {
+fetchStudents();
+};
+
+// Function to handle adding a single student
+const handleAddSingleStudent = async () => {
+  try {
+    isAddingStudent.value = true
+    
+    // Validate required fields
+    const requiredFields = ['studentId', 'firstName', 'middleName', 'lastName', 'email', 'contactNumber', 'year', 'section']
+    for (const field of requiredFields) {
+      if (!newStudent.value[field]) {
+        throw new Error(`${field.charAt(0).toUpperCase() + field.slice(1)} is required`)
+      }
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newStudent.value.email)) {
+      throw new Error('Please enter a valid email address')
+    }
+    
+    const token = store.state.auth.token
+    if (!token) {
+      throw new Error('No authentication token found')
+    }
+    
+    // Send request to add student
+    const response = await api.post('/students', {
+      ...newStudent.value,
+      // Calculate academic years based on current year and student's year level
+      academicYears: calculateAcademicYears(newStudent.value.year)
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
     })
+    
+    console.log('Student added successfully:', response.data)
+    
+    // Reset form and close modal
+    resetNewStudentForm()
+    showAddSingleStudentModal.value = false
+    
+    // Refresh student list
+    await fetchStudents()
+    
+    alert('Student added successfully')
+  } catch (error) {
+    console.error('Failed to add student:', error)
+    alert('Error adding student: ' + (error.response?.data?.message || error.message))
+  } finally {
+    isAddingStudent.value = false
+  }
+}
 
-    // Add these new methods in the setup function
-    const getAssessmentBadgeClass = (type) => {
-      switch (type) {
-        case 'Quiz': return 'badge-quiz'
-        case 'Activity': return 'badge-activity'
-        case 'Performance Task': return 'badge-performance'
-        default: return ''
-      }
-    }
+// Helper function to reset the new student form
+const resetNewStudentForm = () => {
+  newStudent.value = {
+    studentId: '',
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    email: '',
+    contactNumber: '',
+    year: '',
+    section: ''
+  }
+}
 
-    const getScoreClass = (percentage) => {
-      if (percentage >= 90) return 'score-excellent'
-      if (percentage >= 80) return 'score-good'
-      if (percentage >= 70) return 'score-average'
-      return 'score-poor'
-    }
-
-    // Update filteredAssessments computed property to use createdAt
-    const filteredAssessments = computed(() => {
-      if (!selectedStudent.value?.assessments) return [];
-
-      return selectedStudent.value.assessments.filter(assessment => {
-        const assessmentDate = new Date(assessment.createdAt);
-        let passesDateFilter = true;
-
-        if (historyStartDate.value && historyEndDate.value) {
-          const startDate = new Date(historyStartDate.value);
-          startDate.setUTCHours(0, 0, 0, 0);
-          startDate.setHours(startDate.getHours() + 8); // Adjust for Philippine timezone
-          
-          const endDate = new Date(historyEndDate.value);
-          endDate.setUTCHours(23, 59, 59, 999);
-          endDate.setHours(endDate.getHours() + 8); // Adjust for Philippine timezone
-          
-          passesDateFilter = assessmentDate >= startDate && assessmentDate <= endDate;
-        }
-
-        return passesDateFilter;
-      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by createdAt
-    });
-
-    // Update formatDateForDisplay to use Philippine timezone
-    const formatDateForDisplay = (dateString) => {
-      if (!dateString) return '';
-      const date = new Date(dateString);
-      // Adjust for Philippine timezone
-      date.setHours(date.getHours() + 8);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        timeZone: 'Asia/Manila'
-      });
-    };
-
-    // Add click outside handler to close date pickers
-    const handleClickOutside = (event) => {
-      const startPickerContainer = document.querySelector('.date-input-container:first-child');
-      const endPickerContainer = document.querySelector('.date-input-container:last-child');
-      
-      if (startPickerContainer && !startPickerContainer.contains(event.target)) {
-        showStartDatePicker.value = false;
-      }
-      
-      if (endPickerContainer && !endPickerContainer.contains(event.target)) {
-        showEndDatePicker.value = false;
-      }
-    };
-
-    // Add event listener for click outside
-    onMounted(() => {
-      document.addEventListener('click', handleClickOutside);
-    });
-
-    onUnmounted(() => {
-      document.removeEventListener('click', handleClickOutside);
-    });
-
-    // Update clear filter function
-    const clearHistoryDateFilter = () => {
-      historyStartDate.value = '';
-      historyEndDate.value = '';
-      showStartDatePicker.value = false;
-      showEndDatePicker.value = false;
-    };
-
-    // Add watcher for date filter changes
-    watch([historyStartDate, historyEndDate], async () => {
-      if (selectedStudent.value) {
-        await viewStudent(selectedStudent.value);
-      }
-    });
-
-    // Add helper function to calculate averages for filtered data
-    const calculateTypeAverage = (assessments, type) => {
-      const typeAssessments = assessments.filter(a => a.type === type);
-      if (typeAssessments.length === 0) return 0;
-      
-      const sum = typeAssessments.reduce((acc, curr) => {
-        return acc + (curr.score / curr.maxScore * 100);
-      }, 0);
-      
-      return Number((sum / typeAssessments.length).toFixed(2));
-    };
-
-    const clearFilters = () => {
-      selectedYear.value = ''
-      selectedSection.value = ''
-      applyFilters()
-    }
-
-    const clearSearch = () => {
-      searchQuery.value = ''
-      handleSearch()
-    }
-
-    // Add these methods to the setup function
-    const isYearCompleted = (year) => {
-      if (!selectedStudent.value) return false;
-      const yearOrder = { '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
-      const studentYearNum = yearOrder[selectedStudent.value.year];
-      return yearOrder[year] < studentYearNum;
-    };
-
-    const getYearStatus = (year) => {
-      if (!selectedStudent.value) return 'Not Started';
-      const yearOrder = { '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
-      const studentYearNum = yearOrder[selectedStudent.value.year];
-      
-      if (yearOrder[year] < studentYearNum) {
-        return 'Completed';
-      } else if (yearOrder[year] === studentYearNum) {
-        return 'Current';
-      } else {
-        return 'Not Started';
-      }
-    };
-
-    const getAcademicYearRange = (year) => {
-      switch (year) {
+// Helper function to calculate academic years
+const calculateAcademicYears = (year) => {
+  const currentYear = new Date().getFullYear()
+  let startYear, endYear
+  
+  switch(year) {
         case '1st':
-          return '2024 - 2028';
+      startYear = currentYear
+      endYear = currentYear + 4
+      break
         case '2nd':
-          return '2023 - 2027';
+      startYear = currentYear - 1
+      endYear = currentYear + 3
+      break
         case '3rd':
-          return '2022 - 2026';
+      startYear = currentYear - 2
+      endYear = currentYear + 2
+      break
         case '4th':
-          return '2021 - 2025';
+      startYear = currentYear - 3
+      endYear = currentYear + 1
+      break
         default:
-          return 'N/A';
-      }
-    };
+      startYear = currentYear
+      endYear = currentYear + 4
+  }
+  
+  return { startYear, endYear }
+}
 
-    const syncStudentRecords = async () => {
-      try {
-        if (!selectedYear.value || !selectedSection.value) {
-          alert('Please select a year and section first');
-          return;
-        }
-    
-        const response = await axios.post(
-          'http://localhost:8000/api/teacher-class-records/sync-records',
-          {
-            year: selectedYear.value,
-            section: selectedSection.value
-          },
-          {
+// Add fetchStudents function that was accidentally removed
+const fetchStudents = async () => {
+  try {
+    const token = store.state.auth.token;
+    const response = await api.get('/students', {
             headers: {
-              'Authorization': `Bearer ${store.state.auth.token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-    
-        if (response.data.success) {
-          await fetchStudents(); // Refresh the student list
-          alert('Student records synchronized successfully!');
-        }
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    students.value = response.data;
       } catch (error) {
-        console.error('Failed to sync student records:', error);
-        alert('Failed to sync student records. Please try again.');
+    console.error('Failed to fetch students:', error);
+    alert('Failed to fetch students. Please try again.');
       }
     };
 
     return {
       students,
-      teacherSections,
       searchQuery,
       selectedStudent,
       performanceChart,
@@ -1080,8 +1071,46 @@ export default {
       isEditing,
       editingStudent,
       showSearch,
-      selectSection,
-      // ... rest of return values
+showAddStudentModal,
+showAddSingleStudentModal,
+selectedFile,
+uploadYear,
+isUploading,
+availableYears,
+availableSections,
+newStudent,
+isAddingStudent,
+handleFileChange,
+handleFileUpload,
+handleAddSingleStudent,
+resetNewStudentForm,
+filteredStudents,
+closeStudentModal,
+confirmDelete,
+deleteStudent,
+startEditing,
+cancelEditing,
+saveStudentChanges,
+sortBy,
+getSortIcon,
+sortedStudents,
+toggleSearch,
+handleSearch,
+clearSearch,
+fetchStudents,
+hasActiveFilters,
+selectedYear,
+selectedSection,
+viewStudent,
+getAcademicYearRange,
+clearFilters,
+applyFilters,
+currentPage,
+totalPages,
+paginatedStudents,
+paginationInfo,
+nextPage,
+previousPage
     }
   }
 }
@@ -1100,6 +1129,15 @@ export default {
 
 .student-management {
   padding: 20px;
+position: relative;
+}
+
+/* Button container styles */
+.d-flex.gap-2.mb-3 {
+position: static;
+top: auto;
+right: auto;
+z-index: auto;
 }
 
 /* Modal Styles */
@@ -1112,64 +1150,118 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
-  overflow-y: auto;
-  padding: 2rem 1rem;
+z-index: 2000;
+}
+
+.modal-backdrop {
+position: fixed;
+top: 0;
+left: 0;
+width: 100vw;
+height: 100vh;
+background-color: rgba(0, 0, 0, 0.5);
+z-index: 1999;
 }
 
 .modal {
   position: relative;
   width: 100%;
-  max-height: calc(100vh - 4rem);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.modal-dialog {
-  position: relative;
-  width: 100%;
-  pointer-events: auto;
-  margin: 0 auto;
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
+max-width: 500px;
+margin: 2rem;
+z-index: 2001;
+background: white;
+border-radius: 12px;
+box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+overflow: hidden;
 }
 
 .modal-content {
   position: relative;
-  display: flex;
-  flex-direction: column;
   width: 100%;
-  background-color: #fff;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-  z-index: 10001;
-  max-height: calc(100vh - 4rem);
+background: white;
+border-radius: 12px;
   overflow: hidden;
 }
 
 .modal-header {
-  background: #003366;
-  color: white;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 1rem 1.5rem;
+border-bottom: 1px solid #e2e8f0;
 }
 
-.modal-header .modal-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0;
+.modal-header.bg-primary {
+background-color: #003366 !important;
+}
+
+.btn-close-white {
+filter: brightness(0) invert(1);
 }
 
 .modal-body {
-  position: relative;
-  flex: 1 1 auto;
   padding: 1.5rem;
-  overflow-y: auto;
-  max-height: calc(100vh - 10rem);
+}
+
+.form-label {
+font-weight: 500;
+color: #2d3748;
+margin-bottom: 0.5rem;
+}
+
+.form-select,
+.form-control {
+border: 2px solid #e2e8f0;
+border-radius: 8px;
+padding: 0.75rem;
+width: 100%;
+transition: all 0.2s;
+}
+
+.form-select:focus,
+.form-control:focus {
+border-color: #003366;
+box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.1);
+}
+
+.text-muted {
+color: #718096 !important;
+}
+
+.btn {
+padding: 0.75rem 1.5rem;
+font-weight: 500;
+border-radius: 8px;
+transition: all 0.2s;
+}
+
+.btn-primary {
+background-color: #003366;
+border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+background-color: #004080;
+}
+
+.btn-secondary {
+background-color: #e2e8f0;
+border: none;
+color: #4a5568;
+}
+
+.btn-secondary:hover {
+background-color: #cbd5e1;
+}
+
+.btn:disabled {
+opacity: 0.7;
+cursor: not-allowed;
+}
+
+/* Table container styles */
+.table-container {
+margin-top: 0;
 }
 
 /* Table Styles */
@@ -1537,9 +1629,8 @@ export default {
 }
 
 .badge {
-  padding: 0.5em 0.75em;
-  font-weight: 500;
-  font-size: 0.875rem;
+font-size: 1rem;
+padding: 0.5em 1em;
 }
 
 .badge-quiz {
@@ -1804,6 +1895,8 @@ export default {
   display: grid;
   grid-template-columns: 350px 1fr;
   gap: 2rem;
+max-height: calc(90vh - 4rem);
+overflow-y: auto;
 }
 
 .student-info {
@@ -1889,15 +1982,17 @@ export default {
 }
 
 .modal-dialog.modal-xxl {
-  max-width: 1400px;
-  width: 95%;
-  margin: 1rem auto;
+max-width: 90%;
+width: 1400px;
+margin: 2rem auto;
 }
 
 .student-details {
   display: grid;
-  grid-template-columns: 400px 1fr;
+grid-template-columns: 350px 1fr;
   gap: 2rem;
+max-height: calc(90vh - 4rem);
+overflow-y: auto;
 }
 
 .student-info {
@@ -2091,5 +2186,196 @@ export default {
 .timeline-item.current .timeline-status {
   color: #4299e1;
   font-weight: 500;
+}
+
+/* Add Student Modal Styles */
+.add-student-modal {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 9999;
+}
+
+.add-student-backdrop {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background-color: rgba(0, 0, 0, 0.5);
+z-index: 9998;
+}
+
+.add-student-dialog {
+position: relative;
+width: 100%;
+max-width: 500px;
+margin: 1.75rem;
+z-index: 10000;
+}
+
+.add-student-content {
+position: relative;
+display: flex;
+flex-direction: column;
+background-color: #fff;
+border-radius: 12px;
+box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+overflow: hidden;
+}
+
+.modal-header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 1rem 1.5rem;
+}
+
+.modal-header.bg-primary {
+background-color: #003366 !important;
+}
+
+.modal-body {
+padding: 1.5rem;
+}
+
+.btn-close-white {
+filter: brightness(0) invert(1);
+}
+
+/* Form Styles */
+.form-label {
+font-weight: 500;
+color: #2d3748;
+margin-bottom: 0.5rem;
+}
+
+.form-select,
+.form-control {
+border: 2px solid #e2e8f0;
+border-radius: 8px;
+padding: 0.75rem;
+width: 100%;
+transition: all 0.2s;
+}
+
+.form-select:focus,
+.form-control:focus {
+border-color: #003366;
+box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.1);
+}
+
+.text-muted {
+color: #718096 !important;
+}
+
+.btn {
+padding: 0.75rem 1.5rem;
+font-weight: 500;
+border-radius: 8px;
+transition: all 0.2s;
+}
+
+.btn-primary {
+background-color: #003366;
+border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+background-color: #004080;
+}
+
+.btn-secondary {
+background-color: #e2e8f0;
+border: none;
+color: #4a5568;
+}
+
+.btn-secondary:hover {
+background-color: #cbd5e1;
+}
+
+.btn:disabled {
+opacity: 0.7;
+cursor: not-allowed;
+}
+
+/* Add CSS styles for the success button and modal */
+.btn-success {
+  background-color: #10B981;
+  border: none;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #059669;
+}
+
+.modal-header.bg-success {
+  background-color: #10B981 !important;
+}
+
+/* Form validation styles */
+.form-control.is-invalid,
+.form-select.is-invalid {
+  border-color: #dc3545;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right calc(0.375em + 0.1875rem) center;
+  background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+.invalid-feedback {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  font-size: 0.875em;
+  color: #dc3545;
+}
+
+/* Add sticky controls styles */
+.sticky-controls {
+  position: sticky;
+  top: 0;
+  background: white;
+  padding: 1rem;
+  z-index: 1040;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Add pagination styles */
+.pagination-controls {
+  background: white;
+  padding: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pagination-info {
+  color: #4a5568;
+  font-size: 0.9rem;
+}
+
+.pagination-buttons .btn {
+  min-width: 100px;
+}
+
+/* Update table styles for fixed height */
+.table-responsive {
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+}
+
+/* Ensure sticky header stays in place */
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 1020;
 }
 </style>

@@ -73,6 +73,11 @@ const userSchema = new mongoose.Schema({
     section: String,
     subject: String
   }],
+  // User preferences for storing UI state
+  preferences: {
+    type: Object,
+    default: {}
+  },
   createdAt: {
     type: Date,
     default: Date.now,

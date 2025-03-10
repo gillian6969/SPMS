@@ -19,6 +19,7 @@
     "bootstrap": "^5.3.3",
     "bootstrap-vue-next": "^0.9.26",
     "chart.js": "^4.4.7",
+    "chartjs-adapter-moment": "^1.0.1",
     "echarts": "^5.4.3",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.47",
